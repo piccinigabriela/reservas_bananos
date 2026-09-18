@@ -383,6 +383,7 @@ export default function App() {
                 {/* Vista 6: Configuración e iCal */}
                 {currentTab === 'config' && (
                   <ConfigView
+                    reservas={reservas}
                     onSyncAllIcal={handleSyncIcalManual}
                     isSyncing={isSyncingIcal}
                     onDownloadBackup={handleDownloadBackup}

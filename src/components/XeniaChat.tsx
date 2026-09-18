@@ -610,7 +610,19 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
       else if (qLower.includes('usuario') || qLower.includes('modo') || qLower.includes('recep') || qLower.includes('dia a dia') || qLower.includes('propietario')) {
         botResponse = 'Los Bananos tiene 2 modos de uso:\n\n1. Modo Día a Día: Solo tenés el calendario limpio y el botón de carga. Es ideal para trabajar sin distracciones financieras ni pantallas complejas. ¡A mí podés preguntarme lo que quieras por voz desde acá!\n\n2. Modo Propietario: Acceso completo con PIN 1234 para ver finanzas, gastos, Google Calendar y configurar iCal.';
       }
-      // 7. Google Calendar y sincronización
+      // 7. Sincronización iCal y bloqueo de Airbnb
+      else if (
+        qLower.includes('bloquear airbnb') || 
+        qLower.includes('bloqueo airbnb') || 
+        qLower.includes('bloquear') && qLower.includes('airbnb') ||
+        qLower.includes('ical') ||
+        qLower.includes('sincronizar airbnb') ||
+        qLower.includes('doble reserva') ||
+        qLower.includes('overbooking')
+      ) {
+        botResponse = '¡Sí! Para que Airbnb se bloquee automáticamente cuando cargás una reserva directa acá:\n1. Entrá en Modo Propietario con PIN 1234 y tocá la pestaña "Ajustes".\n2. En la sección "Sincronización iCal Bidireccional", tocá "Exportar iCal (.ics)" para la cabaña que quieras.\n3. En Airbnb vas a tu anuncio > Disponibilidad > Conectar calendarios > Importar calendario y pegás el archivo o enlace. Airbnb leerá tus reservas directas y bloqueará esas fechas automáticamente para evitar doble reserva.';
+      }
+      // 8. Google Calendar y sincronización CSV
       else if (qLower.includes('google') || qLower.includes('csv') || qLower.includes('importar') || qLower.includes('sincroniz')) {
         botResponse = 'Para cargar tu Google Calendar:\n1. Arriba a la derecha tocá el botón Google Calendar.\n2. Subí tu archivo .CSV exportado de Google Calendar.\n3. Vas a ver la vista previa con cada evento asignado a su cabaña. Si querés corregís algo y tocás Importar Reservas para que queden registradas.';
       }

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { CABANAS, DN, DC, DEFAULT_PINS, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal } from '../../services/cabinConfig';
-import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save } from 'lucide-react';
+import { Reserva } from '../../types';
+import { downloadIcsFile } from '../../services/icalExport';
+import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink } from 'lucide-react';
 
 interface ConfigViewProps {
+  reservas: Reserva[];
   onSyncAllIcal: () => void;
   isSyncing: boolean;
   onDownloadBackup: () => void;
@@ -10,11 +13,13 @@ interface ConfigViewProps {
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
+  reservas,
   onSyncAllIcal,
   isSyncing,
   onDownloadBackup,
   onRestoreBackup,
 }) => {
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   // PINs
   const [pins, setPins] = useState<Record<string, string>>(() => {
     try {
@@ -221,68 +226,103 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <div>
             <h3 className="text-sm font-bold text-[#2A2118] flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#D2502A]" />
-              <span>Sincronización iCal (Airbnb / Booking)</span>
+              <span>Sincronización iCal Bidireccional (Airbnb & Booking)</span>
             </h3>
             <p className="text-xs text-[#7A6752] mt-0.5">
-              Pegá el link iCal exportado de cada plataforma para que los bloqueos aparezcan automáticamente.
+              Evitá doble reserva: importá las reservas de Airbnb/Booking y exportá las reservas de este sistema a tus plataformas.
             </p>
           </div>
 
           <button
             onClick={onSyncAllIcal}
             disabled={isSyncing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2A2118] text-white hover:bg-[#3D3023] rounded-lg text-xs font-semibold transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2A2118] text-white hover:bg-[#3D3023] rounded-lg text-xs font-semibold transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Sincronizando...' : 'Forzar Sincronización Ahora'}</span>
           </button>
         </div>
 
-        <div className="space-y-3">
-          {CABANAS.map(code => (
-            <div
-              key={code}
-              className="p-3 bg-[#FAF5EE] border border-[#EAE0D2] rounded-xl space-y-2"
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-xs shrink-0"
-                  style={{ backgroundColor: DC[code] }}
-                />
-                <span className="font-bold text-xs sm:text-sm text-[#2A2118]">
-                  {DN[code]}
-                </span>
-              </div>
+        {/* Explicación de cómo exportar a Airbnb para bloquearlo */}
+        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1.5">
+          <div className="font-bold flex items-center gap-1.5 text-amber-950">
+            <span className="text-base">🛡️</span>
+            <span>¿Cómo bloquear Airbnb automáticamente cuando cargás acá una reserva directa?</span>
+          </div>
+          <p className="leading-relaxed">
+            1. En Airbnb, andá a tu anuncio &gt; <strong>Disponibilidad &gt; Conectar calendarios &gt; Importar calendario</strong>.<br />
+            2. Descargá o copiá el enlace iCal de la cabaña abajo y pegalo en Airbnb con el nombre <em>"Los Bananos Directas"</em>.<br />
+            3. ¡Listo! Airbnb leerá tus reservas directas y <strong>bloqueará esas noches en Airbnb</strong> para que nadie más las pueda reservar.
+          </p>
+        </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] font-bold text-[#FF5A5F] block mb-0.5">
-                    URL iCal de Airbnb:
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://www.airbnb.com/calendar/ical/..."
-                    value={icalUrls['ab_' + code] || ''}
-                    onChange={e => handleIcalChange('ab_' + code, e.target.value)}
-                    className="w-full bg-white border border-[#D4C3AE] rounded-md px-2.5 py-1 text-xs text-[#2A2118]"
-                  />
+        <div className="space-y-4">
+          {CABANAS.map(code => {
+            const cabinCount = reservas.filter(
+              r => r.depto === code && r.estado !== 'Cancelada' && r.estado !== 'Non show'
+            ).length;
+
+            return (
+              <div
+                key={code}
+                className="p-3.5 bg-[#FAF5EE] border border-[#EAE0D2] rounded-xl space-y-3"
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-xs shrink-0"
+                      style={{ backgroundColor: DC[code] }}
+                    />
+                    <span className="font-bold text-xs sm:text-sm text-[#2A2118]">
+                      {DN[code]}
+                    </span>
+                    <span className="text-[11px] px-2 py-0.5 bg-[#EAE0D2] text-[#5A4838] rounded-full font-medium">
+                      {cabinCount} reservas activas
+                    </span>
+                  </div>
+
+                  {/* Botón de Descarga del feed .ics */}
+                  <button
+                    type="button"
+                    onClick={() => downloadIcsFile(code, reservas)}
+                    title="Descargar archivo .ics con todas las reservas de esta cabaña"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold rounded-lg shadow-2xs transition cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#D2502A]" />
+                    <span>Exportar iCal (.ics)</span>
+                  </button>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-[#003580] block mb-0.5">
-                    URL iCal de Booking:
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://ical.booking.com/..."
-                    value={icalUrls['bk_' + code] || ''}
-                    onChange={e => handleIcalChange('bk_' + code, e.target.value)}
-                    className="w-full bg-white border border-[#D4C3AE] rounded-md px-2.5 py-1 text-xs text-[#2A2118]"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-[#FF5A5F] block mb-0.5">
+                      1. Importar desde Airbnb (URL iCal de Airbnb):
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://www.airbnb.com/calendar/ical/..."
+                      value={icalUrls['ab_' + code] || ''}
+                      onChange={e => handleIcalChange('ab_' + code, e.target.value)}
+                      className="w-full bg-white border border-[#D4C3AE] rounded-md px-2.5 py-1 text-xs text-[#2A2118]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-[#003580] block mb-0.5">
+                      2. Importar desde Booking (URL iCal de Booking):
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://ical.booking.com/..."
+                      value={icalUrls['bk_' + code] || ''}
+                      onChange={e => handleIcalChange('bk_' + code, e.target.value)}
+                      className="w-full bg-white border border-[#D4C3AE] rounded-md px-2.5 py-1 text-xs text-[#2A2118]"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
