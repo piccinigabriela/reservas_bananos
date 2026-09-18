@@ -1,0 +1,6 @@
+{
+  "name": "Los Bananos Cabañas",
+  "description": "Gestión visual, limpia y accesible de reservas y calendario para Cabañas Los Bananos en Puerto Iguazú.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

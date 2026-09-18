@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Lexend', system-ui, -apple-system, sans-serif;
+  }
+  body {
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+    line-height: 1.55;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  
+  /* Modo alto contraste y lectura relajada para dislexia */
+  .dyslexia-enhanced {
+    letter-spacing: 0.04em !important;
+    word-spacing: 0.08em !important;
+    line-height: 1.75 !important;
+  }
+}
+
+/* Modo Oscuro Charcoal */
+.theme-dark {
+  --bg-main: #12151A;
+  --bg-card: #1A1F26;
+  --bg-hover: #222933;
+  --border-ui: #2D3540;
+  --text-ui: #F1F5F9;
+  --text-dim: #94A3B8;
+  background-color: #12151A;
+  color: #F1F5F9;
+}
+
+.theme-dark ::-webkit-scrollbar-track {
+  background: #161A20;
+}
+.theme-dark ::-webkit-scrollbar-thumb {
+  background: #2D3540;
+  border-radius: 4px;
+}
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: #3F4957;
+}
+
+/* Modo Claro Charcoal */
+.theme-light {
+  --bg-main: #F3F5F7;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F8FAFC;
+  --border-ui: #E2E8F0;
+  --text-ui: #0F172A;
+  --text-dim: #64748B;
+  background-color: #F3F5F7;
+  color: #0F172A;
+}
+
+.theme-light ::-webkit-scrollbar-track {
+  background: #E2E8F0;
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
