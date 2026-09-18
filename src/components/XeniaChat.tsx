@@ -8,8 +8,13 @@ import {
   VolumeX, 
   Mic, 
   MicOff, 
+  Sliders, 
   Square, 
+  Play, 
   AlertCircle, 
+  Camera, 
+  RotateCcw,
+  Sparkles,
   Upload
 } from 'lucide-react';
 
@@ -224,33 +229,34 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   // Puntuación de voces para priorizar voz femenina rioplatense natural
   const rankVoice = (v: SpeechSynthesisVoice): number => {
     let score = 0;
-    const lang = v.lang.toLowerCase();
+    const lang = v.lang.toLowerCase().replace('_', '-');
     const name = v.name.toLowerCase();
 
-    // Preferir acento argentino / uruguayo
-    if (lang === 'es-ar' || lang === 'es_ar') score += 120;
-    else if (lang === 'es-uy' || lang === 'es_uy') score += 110;
-    else if (lang === 'es-419' || lang === 'es_419') score += 70;
-    else if (lang.startsWith('es')) score += 40;
-    else return -100;
-
-    // Femenina y natural
-    if (name.includes('female') || name.includes('mujer') || name.includes('femenin')) score += 50;
-    if (
-      name.includes('isabela') || name.includes('paulina') || name.includes('elena') || 
-      name.includes('luciana') || name.includes('monica') || name.includes('camila') ||
-      name.includes('valentina') || name.includes('soledad') || name.includes('victoria') ||
-      name.includes('valeria') || name.includes('sabina') || name.includes('natural') ||
-      name.includes('online') || name.includes('neural')
-    ) {
-      score += 40;
+    // Descartar de plano cualquier voz masculina evidente
+    const maleKeywords = ['male', 'hombre', 'masculin', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan', 'alvaro', 'gonzalo', 'enrique'];
+    if (maleKeywords.some(m => name.includes(m))) {
+      return -1000;
     }
-    if (name.includes('google')) score += 20;
 
-    // Descartar o penalizar voces masculinas
-    if (name.includes('male') || name.includes('diego') || name.includes('jorge') || name.includes('raul') || name.includes('tomas') || name.includes('pablo')) {
-      score -= 80;
+    // Acento argentino y uruguayo
+    if (lang === 'es-ar') score += 500;
+    else if (lang === 'es-uy') score += 400;
+    else if (lang === 'es-419') score += 200;
+    else if (lang.startsWith('es-')) score += 100;
+    else if (lang.startsWith('es')) score += 50;
+    else return -1000;
+
+    // Femenina comprobada
+    const femaleKeywords = [
+      'female', 'mujer', 'femenin', 'zira', 'sabina', 'helena', 'elena', 
+      'paulina', 'isabela', 'camila', 'luciana', 'valentina', 'soledad', 
+      'victoria', 'monica', 'valeria', 'sofia', 'maria', 'laura', 'natural', 'neural'
+    ];
+    if (femaleKeywords.some(f => name.includes(f))) {
+      score += 250;
     }
+
+    if (name.includes('google')) score += 30;
 
     return score;
   };
@@ -258,16 +264,20 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   const loadVoices = () => {
     if (!isTTSAvailable) return;
     const all = window.speechSynthesis.getVoices();
-    const spanish = all.filter(v => v.lang.toLowerCase().startsWith('es'));
-    spanish.sort((a, b) => rankVoice(b) - rankVoice(a));
-    setAvailableVoices(spanish);
+    // Filtrar solo español y descartar hombres
+    const spanish = all
+      .filter(v => v.lang.toLowerCase().startsWith('es'))
+      .filter(v => {
+        const n = v.name.toLowerCase();
+        return !['male', 'hombre', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan'].some(m => n.includes(m));
+      });
 
-    const saved = localStorage.getItem('bn_xenia_voice_uri');
-    // Si hay una guardada y sigue disponible en este navegador, retenerla
-    if (saved && spanish.some(v => v.voiceURI === saved)) {
-      setSelectedVoiceUri(saved);
-    } else if (spanish.length > 0) {
-      // Si no, tomar automáticamente la mejor voz femenina rioplatense y dejarla guardada
+    // Ordenar de mayor puntaje femenino rioplatense a menor
+    spanish.sort((a, b) => rankVoice(b) - rankVoice(a));
+    setAvailableVoices(spanish.length > 0 ? spanish : all.filter(v => v.lang.toLowerCase().startsWith('es')));
+
+    // Forzar la mejor voz femenina de la lista
+    if (spanish.length > 0) {
       setSelectedVoiceUri(spanish[0].voiceURI);
       localStorage.setItem('bn_xenia_voice_uri', spanish[0].voiceURI);
     }
@@ -318,7 +328,20 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     utterance.pitch = voicePitch;
     utterance.rate = voiceRate;
 
-    const chosenVoice = availableVoices.find(v => v.voiceURI === selectedVoiceUri) || availableVoices[0];
+    // Obtener la mejor voz femenina disponible
+    const allVoices = window.speechSynthesis.getVoices();
+    const isFemale = (v: SpeechSynthesisVoice) => {
+      const n = v.name.toLowerCase();
+      const isMale = ['male', 'hombre', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan'].some(m => n.includes(m));
+      return !isMale;
+    };
+
+    let chosenVoice = availableVoices.find(v => v.voiceURI === selectedVoiceUri);
+    if (!chosenVoice || !isFemale(chosenVoice)) {
+      // Buscar primera voz femenina en español
+      chosenVoice = availableVoices.find(isFemale) || allVoices.find(v => v.lang.toLowerCase().startsWith('es') && isFemale(v));
+    }
+
     if (chosenVoice) {
       utterance.voice = chosenVoice;
       utterance.lang = chosenVoice.lang;
@@ -664,13 +687,20 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         )}
       </button>
 
-      {/* Ventana de Chat Flotante fija a la derecha */}
+      {/* Ventana de Chat Flotante fija estrictamente a la derecha */}
       {isOpen && (
         <div 
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`fixed bottom-22 right-3 sm:right-7 z-40 w-[calc(100vw-24px)] sm:w-[380px] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px] max-h-[calc(100vh-120px)] animate-in slide-in-from-bottom-5 duration-200 border relative ${
+          style={{
+            position: 'fixed',
+            right: '24px',
+            bottom: '88px',
+            left: 'auto',
+            zIndex: 9999
+          }}
+          className={`w-[calc(100vw-32px)] sm:w-[380px] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px] max-h-[calc(100vh-110px)] animate-in slide-in-from-bottom-5 duration-200 border relative ${
             isDark 
               ? 'bg-[#161A20] border-[#2D3540] text-[#F1F5F9]' 
               : 'bg-white border-[#CBD5E1] text-[#0F172A]'
