@@ -8,13 +8,8 @@ import {
   VolumeX, 
   Mic, 
   MicOff, 
-  Sliders, 
   Square, 
-  Play, 
   AlertCircle, 
-  Camera, 
-  RotateCcw,
-  Sparkles,
   Upload
 } from 'lucide-react';
 
@@ -124,20 +119,14 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   const [micStatusText, setMicStatusText] = useState<string>('');
   const [micErrorMsg, setMicErrorMsg] = useState<string | null>(null);
 
-  // Selector y calibración de Voz Rioplatense
+  // Voz Oficial Xenia fija y calibrada (Femenina, Rioplatense, Tono Cálido y Pausado)
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>(() => {
     return localStorage.getItem('bn_xenia_voice_uri') || '';
   });
-  const [voicePitch, setVoicePitch] = useState<number>(() => {
-    const saved = localStorage.getItem('bn_xenia_pitch');
-    return saved ? parseFloat(saved) : 1.15; // Tono cálido
-  });
-  const [voiceRate, setVoiceRate] = useState<number>(() => {
-    const saved = localStorage.getItem('bn_xenia_rate');
-    return saved ? parseFloat(saved) : 1.05; // Dinámica ágil
-  });
-  const [isVoiceConfigOpen, setIsVoiceConfigOpen] = useState<boolean>(false);
+  // Valores calibrados estables: tono 1.15 y velocidad 1.0 (voz clara y amigable)
+  const voicePitch = 1.15;
+  const voiceRate = 1.0;
 
   const recognitionRef = useRef<any>(null);
   const recordedTranscriptRef = useRef<string>('');
@@ -232,31 +221,35 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     );
   };
 
-  // Puntuación de voces para priorizar mujer rioplatense
+  // Puntuación de voces para priorizar voz femenina rioplatense natural
   const rankVoice = (v: SpeechSynthesisVoice): number => {
     let score = 0;
     const lang = v.lang.toLowerCase();
     const name = v.name.toLowerCase();
 
-    if (lang === 'es-ar' || lang === 'es_ar') score += 100;
-    else if (lang === 'es-uy' || lang === 'es_uy') score += 95;
+    // Preferir acento argentino / uruguayo
+    if (lang === 'es-ar' || lang === 'es_ar') score += 120;
+    else if (lang === 'es-uy' || lang === 'es_uy') score += 110;
     else if (lang === 'es-419' || lang === 'es_419') score += 70;
     else if (lang.startsWith('es')) score += 40;
     else return -100;
 
-    if (name.includes('female') || name.includes('mujer') || name.includes('femenin')) score += 30;
+    // Femenina y natural
+    if (name.includes('female') || name.includes('mujer') || name.includes('femenin')) score += 50;
     if (
       name.includes('isabela') || name.includes('paulina') || name.includes('elena') || 
       name.includes('luciana') || name.includes('monica') || name.includes('camila') ||
       name.includes('valentina') || name.includes('soledad') || name.includes('victoria') ||
-      name.includes('valeria') || name.includes('sabina') || name.includes('natural')
+      name.includes('valeria') || name.includes('sabina') || name.includes('natural') ||
+      name.includes('online') || name.includes('neural')
     ) {
-      score += 25;
+      score += 40;
     }
-    if (name.includes('google')) score += 15;
+    if (name.includes('google')) score += 20;
 
+    // Descartar o penalizar voces masculinas
     if (name.includes('male') || name.includes('diego') || name.includes('jorge') || name.includes('raul') || name.includes('tomas') || name.includes('pablo')) {
-      score -= 30;
+      score -= 80;
     }
 
     return score;
@@ -270,9 +263,11 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     setAvailableVoices(spanish);
 
     const saved = localStorage.getItem('bn_xenia_voice_uri');
+    // Si hay una guardada y sigue disponible en este navegador, retenerla
     if (saved && spanish.some(v => v.voiceURI === saved)) {
       setSelectedVoiceUri(saved);
     } else if (spanish.length > 0) {
+      // Si no, tomar automáticamente la mejor voz femenina rioplatense y dejarla guardada
       setSelectedVoiceUri(spanish[0].voiceURI);
       localStorage.setItem('bn_xenia_voice_uri', spanish[0].voiceURI);
     }
@@ -355,25 +350,6 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
       setIsSpeaking(false);
       setSpeakingMessageId(null);
     }
-  };
-
-  const handleSelectVoice = (uri: string) => {
-    setSelectedVoiceUri(uri);
-    localStorage.setItem('bn_xenia_voice_uri', uri);
-  };
-
-  const handleSavePitch = (val: number) => {
-    setVoicePitch(val);
-    localStorage.setItem('bn_xenia_pitch', String(val));
-  };
-
-  const handleSaveRate = (val: number) => {
-    setVoiceRate(val);
-    localStorage.setItem('bn_xenia_rate', String(val));
-  };
-
-  const testVoiceSample = () => {
-    speakText('¡Hola! Soy Xenia de Los Bananos. Estoy lista para responderte y contarte todo lo que pasa en las cabañas.');
   };
 
   const toggleAutoVoice = () => {
@@ -659,14 +635,14 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         className="hidden"
       />
 
-      {/* Botón Flotante Xenia con Ilustración / Foto de Carmen Miranda */}
+      {/* Botón Flotante Xenia con Foto Oficial de Carmen Miranda */}
       <button
         onClick={() => {
           setIsOpen(!isOpen);
           if (isOpen) stopSpeaking();
         }}
-        title="Consultar con Xenia (Asistente de Hospitalidad con Voz)"
-        className={`fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition transform active:scale-95 cursor-pointer ${
+        title="Xenia de Los Bananos (Asistente de Voz)"
+        className={`fixed bottom-5 right-5 sm:right-7 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition transform active:scale-95 cursor-pointer ${
           isSpeaking 
             ? 'ring-4 ring-amber-400 animate-pulse' 
             : 'hover:scale-105'
@@ -688,13 +664,13 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         )}
       </button>
 
-      {/* Drawer / Ventana de Chat */}
+      {/* Ventana de Chat Flotante fija a la derecha */}
       {isOpen && (
         <div 
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`fixed bottom-22 right-4 sm:right-6 z-40 w-[calc(100vw-32px)] sm:w-96 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[540px] animate-in slide-in-from-bottom-5 duration-200 border relative ${
+          className={`fixed bottom-22 right-3 sm:right-7 z-40 w-[calc(100vw-24px)] sm:w-[380px] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px] max-h-[calc(100vh-120px)] animate-in slide-in-from-bottom-5 duration-200 border relative ${
             isDark 
               ? 'bg-[#161A20] border-[#2D3540] text-[#F1F5F9]' 
               : 'bg-white border-[#CBD5E1] text-[#0F172A]'
@@ -712,8 +688,8 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
           {/* Header Charcoal con Avatar de Xenia */}
           <div className="bg-[#12151A] p-3 text-white flex items-center justify-between border-b border-[#2D3540]">
             <div className="flex items-center gap-2.5">
-              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Tocá para cargar tu foto de Xenia">
-                {renderAvatar('w-10 h-10', true)}
+              <div className="relative group">
+                {renderAvatar('w-10 h-10')}
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 absolute bottom-0 right-0 border-2 border-[#12151A] animate-pulse" />
               </div>
               <div>
@@ -729,47 +705,34 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
                   )}
                 </span>
                 <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                  {selectedVoiceObj?.lang?.includes('AR') ? 'Voz Rioplatense 🇦🇷' : 'Asistente de Voz'}
+                  Voz Oficial Femenina 🇦🇷
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              {/* Botón Ajustes de Voz y Foto */}
-              <button
-                onClick={() => setIsVoiceConfigOpen(!isVoiceConfigOpen)}
-                title="Ajustar foto, voz y velocidad de Xenia"
-                className={`p-1.5 rounded-lg border transition text-xs flex items-center gap-1 cursor-pointer ${
-                  isVoiceConfigOpen
-                    ? 'bg-blue-600 text-white border-blue-500'
-                    : 'bg-[#1A1F26] text-slate-400 border-[#2D3540] hover:text-white'
-                }`}
-              >
-                <Sliders className="w-4 h-4" />
-              </button>
-
-              {/* Interruptor Voz Automática */}
+            <div className="flex items-center gap-1.5">
+              {/* Interruptor Voz Automática ON/OFF */}
               <button
                 onClick={toggleAutoVoice}
-                title={autoVoice ? 'Voz activa: Xenia lee cada respuesta automáticamente' : 'Voz pausada: tocar el parlantito para escuchar'}
-                className={`p-1.5 rounded-lg border transition text-xs flex items-center gap-1 cursor-pointer ${
+                title={autoVoice ? 'Voz activa: Xenia lee cada respuesta en voz alta' : 'Voz silenciada'}
+                className={`px-2 py-1 rounded-lg border transition text-xs flex items-center gap-1 cursor-pointer ${
                   autoVoice 
-                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs' 
+                    ? 'bg-emerald-600/90 text-white border-emerald-500 shadow-xs' 
                     : 'bg-[#1A1F26] text-slate-400 border-[#2D3540] hover:text-white'
                 }`}
               >
-                {autoVoice ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                <span className="text-[10px] font-semibold">{autoVoice ? 'Voz ON' : 'Voz'}</span>
+                {autoVoice ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                <span className="text-[10px] font-semibold">{autoVoice ? 'Voz ON' : 'Silencio'}</span>
               </button>
 
               {/* Parar voz si está hablando */}
               {isSpeaking && (
                 <button
                   onClick={stopSpeaking}
-                  title="Detener voz"
-                  className="p-1.5 rounded-lg bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 transition cursor-pointer"
+                  title="Detener audio"
+                  className="p-1 rounded-lg bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 transition cursor-pointer"
                 >
-                  <Square className="w-4 h-4 fill-current" />
+                  <Square className="w-3.5 h-3.5 fill-current" />
                 </button>
               )}
 
@@ -778,146 +741,13 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
                   stopSpeaking();
                   setIsOpen(false);
                 }}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                title="Cerrar"
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
-
-          {/* Banner sugerido para cargar tu archivo xeniabananos.jpeg con 1 clic */}
-          {!customAvatar && (
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-gradient-to-r from-amber-600/25 via-pink-600/25 to-purple-600/25 border-b border-amber-500/30 px-3 py-2 flex items-center justify-between text-xs cursor-pointer hover:bg-amber-600/35 transition"
-            >
-              <div className="flex items-center gap-2">
-                <Camera className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="text-amber-200 text-[11px] leading-tight">
-                  <strong>¿Tenés la foto de Xenia?</strong> Tocá acá para cargar tu archivo y verla en vivo.
-                </span>
-              </div>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-slate-900 font-bold shrink-0">
-                Cargar
-              </span>
-            </div>
-          )}
-
-          {/* Panel de Configuración de Voz y Foto Tropical */}
-          {isVoiceConfigOpen && (
-            <div className={`p-3.5 border-b text-xs space-y-3.5 animate-in slide-in-from-top-2 duration-150 max-h-72 overflow-y-auto ${
-              isDark ? 'bg-[#13171D] border-[#2D3540] text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
-            }`}>
-              {/* Sección Foto de Xenia */}
-              <div className="p-2.5 rounded-xl bg-[#1A1F26] border border-[#2D3540] flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  {renderAvatar('w-12 h-12', true)}
-                  <div>
-                    <span className="font-bold text-xs text-white block">Foto de Xenia 🍍</span>
-                    <span className="text-[10px] text-slate-400">
-                      {customAvatar ? 'Foto personalizada activa' : 'Ilustración Carmen Miranda'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Cargar foto desde tu dispositivo"
-                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] transition cursor-pointer shadow-xs active:scale-95"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>{customAvatar ? 'Cambiar' : 'Subir archivo'}</span>
-                  </button>
-                  {customAvatar && (
-                    <button
-                      onClick={handleResetAvatar}
-                      title="Volver a la ilustración"
-                      className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Selector de Voces disponibles */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-slate-400 font-medium block">
-                    Voz instalada en tu navegador/teléfono:
-                  </label>
-                  <button
-                    onClick={testVoiceSample}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] shadow-xs active:scale-95 transition cursor-pointer"
-                  >
-                    <Play className="w-2.5 h-2.5 fill-current" />
-                    <span>Probar audio</span>
-                  </button>
-                </div>
-                <select
-                  value={selectedVoiceUri}
-                  onChange={e => handleSelectVoice(e.target.value)}
-                  className={`w-full p-2 rounded-lg text-xs outline-none border transition ${
-                    isDark 
-                      ? 'bg-[#1A1F26] border-[#2D3540] text-white' 
-                      : 'bg-white border-slate-300 text-slate-800'
-                  }`}
-                >
-                  {availableVoices.map(v => {
-                    const isAr = v.lang.toLowerCase().includes('ar') || v.lang.toLowerCase().includes('uy');
-                    return (
-                      <option key={v.voiceURI} value={v.voiceURI}>
-                        {isAr ? '🇦🇷 ' : '🌎 '} {v.name} ({v.lang})
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {/* Sliders: Tono Femenino y Velocidad Pausada */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-400">
-                    <span>Tono (Femenino)</span>
-                    <span className="font-bold text-white">{voicePitch.toFixed(2)}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.8"
-                    max="1.4"
-                    step="0.05"
-                    value={voicePitch}
-                    onChange={e => handleSavePitch(parseFloat(e.target.value))}
-                    className="w-full accent-emerald-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[9px] text-slate-500">
-                    <span>Grave</span>
-                    <span>Agudo / Cálido</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-400">
-                    <span>Velocidad</span>
-                    <span className="font-bold text-white">{voiceRate.toFixed(2)}x</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.8"
-                    max="1.4"
-                    step="0.02"
-                    value={voiceRate}
-                    onChange={e => handleSaveRate(parseFloat(e.target.value))}
-                    className="w-full accent-emerald-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[9px] text-slate-500">
-                    <span>Tranquila</span>
-                    <span>Rápida</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs sm:text-sm">
