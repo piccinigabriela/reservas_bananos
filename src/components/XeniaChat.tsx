@@ -101,10 +101,12 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   const [inputVal, setInputVal] = useState<string>('');
   const [isTyping, setIsTyping] = useState<boolean>(false);
 
-  // Avatar personalizado de Xenia (guarda base64 en localStorage)
+  // Avatar personalizado de Xenia (guarda base64 en localStorage o usa la foto oficial)
   const [customAvatar, setCustomAvatar] = useState<string | null>(() => {
     return localStorage.getItem('bn_xenia_avatar') || null;
   });
+  const [defaultAvatarError, setDefaultAvatarError] = useState<boolean>(false);
+  const officialAvatarPath = './xeniabananos.jpeg';
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
@@ -200,20 +202,27 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     }
   };
 
-  // Renderizador del Avatar: muestra la foto real subida o la hermosa ilustración Carmen Miranda
+  // Renderizador del Avatar: muestra la foto real subida, la oficial xeniabananos.jpeg o la ilustración
+  const activeAvatarSrc = customAvatar || (!defaultAvatarError ? officialAvatarPath : null);
+
   const renderAvatar = (sizeClass = 'w-8 h-8', showClickToUpload = false) => {
     return (
       <div 
         onClick={showClickToUpload ? () => fileInputRef.current?.click() : undefined}
         title={showClickToUpload ? 'Tocá para cambiar o cargar la foto de Xenia' : 'Xenia de Los Bananos'}
-        className={`${sizeClass} rounded-full overflow-hidden relative shrink-0 border-2 border-amber-400 shadow-md flex items-center justify-center ${
+        className={`${sizeClass} rounded-full overflow-hidden relative shrink-0 border-2 border-amber-400 shadow-md flex items-center justify-center bg-amber-950/40 ${
           showClickToUpload ? 'cursor-pointer hover:opacity-90 hover:scale-105 transition' : ''
         }`}
       >
-        {customAvatar ? (
+        {activeAvatarSrc ? (
           <img
-            src={customAvatar}
+            src={activeAvatarSrc}
             alt="Xenia Tropical"
+            onError={() => {
+              if (!customAvatar) {
+                setDefaultAvatarError(true);
+              }
+            }}
             className="w-full h-full object-cover object-top"
           />
         ) : (

@@ -32,8 +32,15 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Prepare assets
+        run: |
+          mkdir -p public
+          if [ -f xeniabananos.jpeg ]; then cp xeniabananos.jpeg public/; fi
+
       - name: Build app
-        run: npm run build
+        run: |
+          npm run build
+          if [ -f xeniabananos.jpeg ]; then cp xeniabananos.jpeg dist/; fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
