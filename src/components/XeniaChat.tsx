@@ -124,12 +124,12 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   const [micStatusText, setMicStatusText] = useState<string>('');
   const [micErrorMsg, setMicErrorMsg] = useState<string | null>(null);
 
-  // Voz Oficial Xenia fija y calibrada (Femenina, Rioplatense, Tono Cálido y Pausado)
+  // Selector y calibración de Voz Femenina Rioplatense
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>(() => {
     return localStorage.getItem('bn_xenia_voice_uri') || '';
   });
-  // Valores calibrados estables: tono 1.15 y velocidad 1.0 (voz clara y amigable)
+  const [showVoiceSelect, setShowVoiceSelect] = useState<boolean>(false);
   const voicePitch = 1.15;
   const voiceRate = 1.0;
 
@@ -232,31 +232,32 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     const lang = v.lang.toLowerCase().replace('_', '-');
     const name = v.name.toLowerCase();
 
-    // Descartar de plano cualquier voz masculina evidente
-    const maleKeywords = ['male', 'hombre', 'masculin', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan', 'alvaro', 'gonzalo', 'enrique'];
+    // Descartar tajantemente cualquier voz masculina
+    const maleKeywords = ['male', 'hombre', 'masculin', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan', 'alvaro', 'gonzalo', 'enrique', 'david', 'antonio', 'manuel'];
     if (maleKeywords.some(m => name.includes(m))) {
-      return -1000;
+      return -10000;
     }
 
     // Acento argentino y uruguayo
-    if (lang === 'es-ar') score += 500;
-    else if (lang === 'es-uy') score += 400;
-    else if (lang === 'es-419') score += 200;
-    else if (lang.startsWith('es-')) score += 100;
-    else if (lang.startsWith('es')) score += 50;
-    else return -1000;
+    if (lang === 'es-ar') score += 1000;
+    else if (lang === 'es-uy') score += 800;
+    else if (lang === 'es-419') score += 500;
+    else if (lang === 'es-es') score += 100;
+    else if (lang.startsWith('es-')) score += 200;
+    else if (lang.startsWith('es')) score += 150;
+    else return -10000;
 
     // Femenina comprobada
     const femaleKeywords = [
       'female', 'mujer', 'femenin', 'zira', 'sabina', 'helena', 'elena', 
       'paulina', 'isabela', 'camila', 'luciana', 'valentina', 'soledad', 
-      'victoria', 'monica', 'valeria', 'sofia', 'maria', 'laura', 'natural', 'neural'
+      'victoria', 'monica', 'valeria', 'sofia', 'maria', 'laura', 'natural', 'neural', 'hilda'
     ];
     if (femaleKeywords.some(f => name.includes(f))) {
-      score += 250;
+      score += 400;
     }
 
-    if (name.includes('google')) score += 30;
+    if (name.includes('google')) score += 50;
 
     return score;
   };
@@ -264,22 +265,34 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   const loadVoices = () => {
     if (!isTTSAvailable) return;
     const all = window.speechSynthesis.getVoices();
-    // Filtrar solo español y descartar hombres
-    const spanish = all
-      .filter(v => v.lang.toLowerCase().startsWith('es'))
-      .filter(v => {
-        const n = v.name.toLowerCase();
-        return !['male', 'hombre', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan'].some(m => n.includes(m));
-      });
+    if (!all || all.length === 0) return;
 
-    // Ordenar de mayor puntaje femenino rioplatense a menor
-    spanish.sort((a, b) => rankVoice(b) - rankVoice(a));
-    setAvailableVoices(spanish.length > 0 ? spanish : all.filter(v => v.lang.toLowerCase().startsWith('es')));
+    // Filtrar español y excluir nombres típicamente masculinos
+    const maleKeywords = ['male', 'hombre', 'diego', 'jorge', 'raul', 'tomas', 'pablo', 'carlos', 'miguel', 'juan', 'alvaro', 'gonzalo', 'enrique', 'david'];
+    const femaleOrNeutral = all.filter(v => {
+      if (!v.lang.toLowerCase().startsWith('es')) return false;
+      const n = v.name.toLowerCase();
+      return !maleKeywords.some(m => n.includes(m));
+    });
 
-    // Forzar la mejor voz femenina de la lista
-    if (spanish.length > 0) {
-      setSelectedVoiceUri(spanish[0].voiceURI);
-      localStorage.setItem('bn_xenia_voice_uri', spanish[0].voiceURI);
+    // Ordenar de mayor a menor según prioridad rioplatense femenina
+    femaleOrNeutral.sort((a, b) => rankVoice(b) - rankVoice(a));
+
+    const finalVoices = femaleOrNeutral.length > 0 
+      ? femaleOrNeutral 
+      : all.filter(v => v.lang.toLowerCase().startsWith('es'));
+
+    setAvailableVoices(finalVoices);
+
+    const saved = localStorage.getItem('bn_xenia_voice_uri');
+    const isSavedValidAndFemale = saved && finalVoices.some(v => v.voiceURI === saved);
+
+    if (isSavedValidAndFemale) {
+      setSelectedVoiceUri(saved);
+    } else if (finalVoices.length > 0) {
+      // Elegir directamente la número 1 (la mujer rioplatense mejor calificada)
+      setSelectedVoiceUri(finalVoices[0].voiceURI);
+      localStorage.setItem('bn_xenia_voice_uri', finalVoices[0].voiceURI);
     }
   };
 
@@ -741,6 +754,22 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* Botón para cambiar entre las voces femeninas de tu navegador */}
+              {availableVoices.length > 1 && (
+                <button
+                  onClick={() => setShowVoiceSelect(!showVoiceSelect)}
+                  title="Elegir voz de Xenia"
+                  className={`p-1.5 rounded-lg border transition text-xs flex items-center gap-1 cursor-pointer ${
+                    showVoiceSelect
+                      ? 'bg-amber-600 text-white border-amber-500'
+                      : 'bg-[#1A1F26] text-slate-400 border-[#2D3540] hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="text-[10px] hidden sm:inline">Voz</span>
+                </button>
+              )}
+
               {/* Interruptor Voz Automática ON/OFF */}
               <button
                 onClick={toggleAutoVoice}
@@ -778,6 +807,55 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
               </button>
             </div>
           </div>
+
+          {/* Menú Rápido para elegir la voz femenina que más te guste de tu computadora */}
+          {showVoiceSelect && (
+            <div className={`p-3 border-b text-xs space-y-2 animate-in slide-in-from-top-1 duration-150 ${
+              isDark ? 'bg-[#151921] border-[#2D3540] text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[11px] text-amber-400 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5" /> Voces disponibles en tu equipo:
+                </span>
+                <button
+                  onClick={() => speakText('¡Hola! Soy Xenia de Cabañas Los Bananos. ¿En qué te puedo ayudar hoy?')}
+                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-[10px] shadow-xs cursor-pointer"
+                >
+                  Probar esta voz
+                </button>
+              </div>
+
+              <select
+                value={selectedVoiceUri}
+                onChange={(e) => {
+                  const uri = e.target.value;
+                  setSelectedVoiceUri(uri);
+                  localStorage.setItem('bn_xenia_voice_uri', uri);
+                  // Hablar inmediatamente una frase de prueba para que escuche si le gusta
+                  setTimeout(() => {
+                    speakText('¡Hola! Soy Xenia de Los Bananos.');
+                  }, 50);
+                }}
+                className={`w-full p-2 rounded-lg text-xs outline-none border transition ${
+                  isDark 
+                    ? 'bg-[#1E242E] border-[#363F4D] text-white' 
+                    : 'bg-white border-slate-300 text-slate-800'
+                }`}
+              >
+                {availableVoices.map((v) => {
+                  const isAr = v.lang.toLowerCase().includes('ar') || v.lang.toLowerCase().includes('uy');
+                  return (
+                    <option key={v.voiceURI} value={v.voiceURI}>
+                      {isAr ? '🇦🇷' : '👩'} {v.name} ({v.lang})
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[10px] text-slate-400">
+                Al seleccionar una voz queda guardada para siempre en este equipo sin desenfocar.
+              </p>
+            </div>
+          )}
 
           {/* Mensajes */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs sm:text-sm">
