@@ -493,6 +493,9 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   };
 
   const sendMessage = async (userText: string, fromVoice = false) => {
+    // Detener de inmediato cualquier locución previa en cola para evitar que se pisen las respuestas
+    stopSpeaking();
+
     const newMsgId = Date.now().toString(36);
     setMessages(prev => [...prev, { id: newMsgId, role: 'user', text: userText }]);
     setIsTyping(true);
@@ -502,7 +505,20 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     setTimeout(() => {
       let botResponse = '';
 
+      // 1. Preguntas de ayuda / cómo hacer una reserva o usar el sistema
       if (
+        qLower.includes('como hago una reserva') || 
+        qLower.includes('como creo una reserva') || 
+        qLower.includes('como cargar') || 
+        qLower.includes('como anoto') ||
+        qLower.includes('nueva reserva') ||
+        qLower.includes('cargar reserva') ||
+        qLower.includes('agregar reserva')
+      ) {
+        botResponse = 'Para crear una nueva reserva podés:\n1. Tocar el botón verde "+ Nueva Reserva" arriba a la izquierda.\n2. O hacer clic directamente sobre el día de entrada en el calendario para la cabaña que quieras.\nSe abrirá la ficha para ingresar nombre del huésped, fechas, tarifa y seña.';
+      }
+      // 2. Saludos
+      else if (
         qLower.startsWith('hola') || qLower.startsWith('buen') || qLower.startsWith('buenas') || 
         qLower.includes('cómo estás') || qLower.includes('como andas') || qLower.includes('que tal') ||
         qLower === 'xenia' || qLower === 'hola xenia'
@@ -512,14 +528,91 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         );
         botResponse = `¡Hola! ¿Cómo andás? Todo en orden por acá en Los Bananos 🍍 Hoy tenemos ${act.length} de las 7 cabañas ocupadas. ¿Querés que te cuente quién llega, qué cabañas están libres o cómo vienen las ganancias?`;
       }
+      // 3. Próximo huésped / Próximo check-in / Entradas (¡PRIORIDAD ANTES DE CASILLAS!)
+      else if (
+        qLower.includes('check in') || qLower.includes('check-in') || qLower.includes('checkin') ||
+        qLower.includes('proximo') || qLower.includes('proxima') || qLower.includes('siguiente') ||
+        qLower.includes('llega') || qLower.includes('entran') || qLower.includes('viene') || 
+        qLower.includes('vienen') || qLower.includes('cuando entra') || qLower.includes('quien entra')
+      ) {
+        if (qLower.includes('hoy')) {
+          const hoyCheckin = reservas.filter(
+            r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin === today
+          );
+          if (hoyCheckin.length === 0) {
+            botResponse = 'Hoy no tenés check-ins programados en ninguna cabaña. Todo en calma.';
+          } else {
+            botResponse = `Hoy llegan ${hoyCheckin.length} huéspedes:\n` +
+              hoyCheckin.map(r => `• ${r.huesped} en ${DN[r.depto]} (${r.plataforma})`).join('\n');
+          }
+        } else if (qLower.includes('mañana')) {
+          const manCheckin = reservas.filter(
+            r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin === tomorrow
+          );
+          if (manCheckin.length === 0) {
+            botResponse = 'Mañana no hay check-ins previstos.';
+          } else {
+            botResponse = `Mañana llegan ${manCheckin.length} huéspedes:\n` +
+              manCheckin.map(r => `• ${r.huesped} en ${DN[r.depto]}`).join('\n');
+          }
+        } else {
+          // Próximo check-in o próximos huéspedes (sin límite artificial de 7 días)
+          const futurosCheckins = reservas
+            .filter(r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin >= today)
+            .sort((a, b) => a.checkin.localeCompare(b.checkin));
+
+          if (futurosCheckins.length === 0) {
+            botResponse = 'Por el momento no hay futuros check-ins registrados en las cabañas.';
+          } else {
+            const primerCheckin = futurosCheckins[0];
+            const mismosDia = futurosCheckins.filter(r => r.checkin === primerCheckin.checkin);
+            
+            if (mismosDia.length === 1) {
+              botResponse = `El próximo check-in es de ${primerCheckin.huesped} el ${formatDateEs(primerCheckin.checkin)} en ${DN[primerCheckin.depto]} (${primerCheckin.plataforma}). Se queda hasta el ${formatDateEs(primerCheckin.checkout)}.`;
+            } else {
+              botResponse = `El próximo ingreso es el ${formatDateEs(primerCheckin.checkin)} con ${mismosDia.length} huéspedes:\n` +
+                mismosDia.map(r => `• ${r.huesped} en ${DN[r.depto]} (${r.plataforma})`).join('\n');
+            }
+
+            // Si hay más reservas en los siguientes días, agregar un breve resumen
+            const siguientes = futurosCheckins.filter(r => r.checkin > primerCheckin.checkin).slice(0, 3);
+            if (siguientes.length > 0) {
+              botResponse += `\n\nLuego le siguen:\n` + siguientes.map(r => `• ${r.huesped}: ${formatDateEs(r.checkin)} (${DN[r.depto]})`).join('\n');
+            }
+          }
+        }
+      }
+      // 4. Salidas / Check-out
+      else if (qLower.includes('check out') || qLower.includes('check-out') || qLower.includes('checkout') || qLower.includes('sale') || qLower.includes('salen') || qLower.includes('se va') || qLower.includes('se van') || qLower.includes('salida')) {
+        const checkoutsHoy = reservas.filter(
+          r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkout === today
+        );
+        if (checkoutsHoy.length === 0) {
+          const proxCheckout = reservas
+            .filter(r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkout >= today)
+            .sort((a, b) => a.checkout.localeCompare(b.checkout))[0];
+          
+          if (proxCheckout) {
+            botResponse = `Hoy no hay salidas programadas. El próximo check-out es el ${formatDateEs(proxCheckout.checkout)}: ${proxCheckout.huesped} deja ${DN[proxCheckout.depto]}.`;
+          } else {
+            botResponse = 'Hoy no hay salidas programadas. Todos los huéspedes continúan su estadía.';
+          }
+        } else {
+          botResponse = `Hoy hacen check-out ${checkoutsHoy.length} huéspedes:\n` +
+            checkoutsHoy.map(r => `• ${r.huesped} deja ${DN[r.depto]}`).join('\n');
+        }
+      }
+      // 5. Explicación de las casillas compartimentadas (solo si pregunta específicamente por casillas / diseño)
+      else if (qLower.includes('compartiment') || qLower.includes('casilla') || (qLower.includes('dividid') && (qLower.includes('dia') || qLower.includes('calendario')))) {
+        botResponse = 'Las casillas compartimentadas del calendario dividen el día en dos:\n• Lado izquierdo OUT: el huésped que hace check-out por la mañana.\n• Lado derecho IN: el nuevo huésped que hace check-in por la tarde.\nPodés tocar cualquiera de los dos lados para abrir la ficha de esa reserva en particular.';
+      }
+      // 6. Modos de usuario
       else if (qLower.includes('usuario') || qLower.includes('modo') || qLower.includes('recep') || qLower.includes('dia a dia') || qLower.includes('propietario')) {
         botResponse = 'Los Bananos tiene 2 modos de uso:\n\n1. Modo Día a Día: Solo tenés el calendario limpio y el botón de carga. Es ideal para trabajar sin distracciones financieras ni pantallas complejas. ¡A mí podés preguntarme lo que quieras por voz desde acá!\n\n2. Modo Propietario: Acceso completo con PIN 1234 para ver finanzas, gastos, Google Calendar y configurar iCal.';
       }
-      else if (qLower.includes('google') || qLower.includes('csv') || qLower.includes('importar') || qLower.includes('calendar')) {
+      // 7. Google Calendar y sincronización
+      else if (qLower.includes('google') || qLower.includes('csv') || qLower.includes('importar') || qLower.includes('sincroniz')) {
         botResponse = 'Para cargar tu Google Calendar:\n1. Arriba a la derecha tocá el botón Google Calendar.\n2. Subí tu archivo .CSV exportado de Google Calendar.\n3. Vas a ver la vista previa con cada evento asignado a su cabaña. Si querés corregís algo y tocás Importar Reservas para que queden registradas.';
-      }
-      else if (qLower.includes('compartiment') || qLower.includes('partid') || qLower.includes('in') || qLower.includes('out') || (qLower.includes('salida') && qLower.includes('entrada'))) {
-        botResponse = 'Las casillas compartimentadas dividen el día en dos:\n• Lado izquierdo OUT: el huésped que hace check-out por la mañana.\n• Lado derecho IN: el nuevo huésped que hace check-in por la tarde.\nPodés tocar cualquiera de los dos lados para abrir la ficha de esa reserva en particular.';
       }
       else if (qLower.includes('cabaña') || qLower.includes('depto') || qLower.match(/cab\s*\d/) || qLower.match(/la\s*[1-7]/)) {
         const match = qLower.match(/[1-7]/);
@@ -546,54 +639,7 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
           botResponse = 'Los Bananos tiene 7 cabañas: Cabaña 1 a 6 para 4 huéspedes, y Cabaña 7 para 6 huéspedes. ¿De cuál querés información?';
         }
       }
-      else if (
-        qLower.includes('llega') || qLower.includes('entran') || qLower.includes('viene') || 
-        qLower.includes('vienen') || qLower.includes('checkin') || qLower.includes('check-in') ||
-        qLower.includes('reserva')
-      ) {
-        if (qLower.includes('hoy')) {
-          const hoyCheckin = reservas.filter(
-            r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin === today
-          );
-          if (hoyCheckin.length === 0) {
-            botResponse = 'Hoy no tenés check-ins programados en ninguna cabaña. Todo en calma.';
-          } else {
-            botResponse = `Hoy llegan ${hoyCheckin.length} huéspedes:\n` +
-              hoyCheckin.map(r => `• ${r.huesped} en ${DN[r.depto]} (${r.plataforma})`).join('\n');
-          }
-        } else if (qLower.includes('mañana')) {
-          const manCheckin = reservas.filter(
-            r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin === tomorrow
-          );
-          if (manCheckin.length === 0) {
-            botResponse = 'Mañana no hay check-ins previstos.';
-          } else {
-            botResponse = `Mañana llegan ${manCheckin.length} huéspedes:\n` +
-              manCheckin.map(r => `• ${r.huesped} en ${DN[r.depto]}`).join('\n');
-          }
-        } else {
-          const prox = reservas.filter(
-            r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin >= today && r.checkin <= in7Str
-          );
-          if (prox.length === 0) {
-            botResponse = 'Para los próximos 7 días no hay check-ins programados en las 7 cabañas.';
-          } else {
-            botResponse = `En los próximos días llegan ${prox.length} huéspedes:\n` +
-              prox.map(r => `• ${r.huesped} en ${DN[r.depto]} (${formatDateEs(r.checkin)})`).join('\n');
-          }
-        }
-      }
-      else if (qLower.includes('sale') || qLower.includes('salen') || qLower.includes('se va') || qLower.includes('se van') || qLower.includes('checkout') || qLower.includes('check-out') || qLower.includes('salida')) {
-        const checkoutsHoy = reservas.filter(
-          r => !r.icalUid && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkout === today
-        );
-        if (checkoutsHoy.length === 0) {
-          botResponse = 'Hoy no hay salidas programadas. Todos los huéspedes continúan su estadía.';
-        } else {
-          botResponse = `Hoy hacen check-out ${checkoutsHoy.length} huéspedes:\n` +
-            checkoutsHoy.map(r => `• ${r.huesped} deja ${DN[r.depto]}`).join('\n');
-        }
-      }
+
       else if (
         qLower.includes('libre') || qLower.includes('libres') || qLower.includes('disponib') || 
         qLower.includes('ocupad') || qLower.includes('hay lugar') || qLower.includes('vacia')
