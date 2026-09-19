@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Reserva, Gasto } from '../types';
+import { Reserva, Gasto, CabinCode } from '../types';
 import { DN, calcFinancials, formatMoney, formatDateEs, CABANAS } from '../services/cabinConfig';
 import { 
   X, 
@@ -626,29 +626,83 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
       else if (qLower.includes('google') || qLower.includes('csv') || qLower.includes('importar') || qLower.includes('sincroniz')) {
         botResponse = 'Para cargar tu Google Calendar:\n1. Arriba a la derecha tocá el botón Google Calendar.\n2. Subí tu archivo .CSV exportado de Google Calendar.\n3. Vas a ver la vista previa con cada evento asignado a su cabaña. Si querés corregís algo y tocás Importar Reservas para que queden registradas.';
       }
-      else if (qLower.includes('cabaña') || qLower.includes('depto') || qLower.match(/cab\s*\d/) || qLower.match(/la\s*[1-7]/)) {
-        const match = qLower.match(/[1-7]/);
-        if (match) {
-          const cNum = match[0] as unknown as keyof typeof DN;
+      // 9. Consulta por cabañas (individual o general)
+      else if (
+        qLower.includes('cabaña') || 
+        qLower.includes('cabana') || 
+        qLower.includes('depto') || 
+        qLower.includes('habitacion') || 
+        qLower.includes('habitación') || 
+        qLower.includes('jacuzzi') ||
+        qLower.match(/\bc[1-9]\b/) ||
+        qLower.match(/\b(la|el)\s*[1-9]\b/)
+      ) {
+        let targetCode: CabinCode | null = null;
+        let isInvalidNumber: number | null = null;
+
+        if (qLower.includes('jacuzzi')) {
+          targetCode = 'C7';
+        } else {
+          // Buscar número o palabra numérica
+          let num: number | null = null;
+          const numMatch = qLower.match(/c([1-9])\b/) || qLower.match(/\b([1-9])\b/);
+          if (numMatch) {
+            num = parseInt(numMatch[1], 10);
+          } else if (qLower.includes('uno') || qLower.includes('primera')) num = 1;
+          else if (qLower.includes('dos') || qLower.includes('segunda')) num = 2;
+          else if (qLower.includes('tres') || qLower.includes('tercera')) num = 3;
+          else if (qLower.includes('cuatro') || qLower.includes('cuarta')) num = 4;
+          else if (qLower.includes('cinco') || qLower.includes('quinta')) num = 5;
+          else if (qLower.includes('seis') || qLower.includes('sexta')) num = 6;
+          else if (qLower.includes('siete') || qLower.includes('séptima') || qLower.includes('septima')) num = 7;
+          else if (qLower.includes('ocho') || qLower.includes('octava')) num = 8;
+          else if (qLower.includes('nueve') || qLower.includes('novena')) num = 9;
+
+          if (num !== null) {
+            if (num === 1 || num === 4) {
+              isInvalidNumber = num;
+            } else {
+              const code = `C${num}` as CabinCode;
+              if (CABANAS.includes(code)) {
+                targetCode = code;
+              }
+            }
+          }
+        }
+
+        if (isInvalidNumber !== null) {
+          botResponse = `En Los Bananos no existe la Cabaña ${isInvalidNumber}. Las 7 cabañas del complejo son:\n\n• Cabaña 2 y Cabaña 3: Tipo Big (4 a 6 personas)\n• Cabaña 7: Tipo Tiny Jacuzzi (2 personas, con hidromasaje)\n• Cabañas 5, 6, 8 y 9: Tipo Tiny Estándar (2 a 4 personas)\n\n¿Querías consultar por la Cabaña 2 o por alguna otra?`;
+        } else if (targetCode) {
+          const cabinName = DN[targetCode] || `Cabaña ${targetCode.replace('C', '')}`;
+          const tipoTexto = (targetCode === 'C2' || targetCode === 'C3')
+            ? 'Cabaña Big (capacidad para 4 a 6 personas, ideal familias o grupos)'
+            : targetCode === 'C7'
+            ? 'Cabaña Tiny Jacuzzi (capacidad para 2 personas, con hidromasaje exclusivo, ideal parejas)'
+            : 'Cabaña Tiny Estándar (capacidad para 2 a 4 personas, totalmente equipada)';
+
           const currentOccupant = reservas.find(
-            r => r.depto === cNum && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin <= today && r.checkout > today
+            r => r.depto === targetCode && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin <= today && r.checkout > today
           );
           const nextGuest = reservas
-            .filter(r => r.depto === cNum && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin >= today)
+            .filter(r => r.depto === targetCode && r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin >= today)
             .sort((a, b) => a.checkin.localeCompare(b.checkin))[0];
 
+          let estadoTexto = '';
           if (currentOccupant) {
-            botResponse = `En ${DN[cNum]} hoy está alojado ${currentOccupant.huesped} hasta el ${formatDateEs(currentOccupant.checkout)} (${currentOccupant.plataforma}).`;
+            estadoTexto = `• Estado hoy: Ocupada por ${currentOccupant.huesped} hasta el ${formatDateEs(currentOccupant.checkout)} (${currentOccupant.plataforma}).`;
             if (nextGuest && nextGuest.id !== currentOccupant.id) {
-              botResponse += ` Su próximo huésped es ${nextGuest.huesped}, que entra el ${formatDateEs(nextGuest.checkin)}.`;
+              estadoTexto += `\n• Próximo ingreso: ${nextGuest.huesped} entra el ${formatDateEs(nextGuest.checkin)} (${nextGuest.plataforma}).`;
             }
           } else if (nextGuest) {
-            botResponse = `${DN[cNum]} está libre hoy. Su próxima reserva es de ${nextGuest.huesped}, entrando el ${formatDateEs(nextGuest.checkin)} (${nextGuest.plataforma}).`;
+            estadoTexto = `• Estado hoy: Libre.\n• Próxima reserva: ${nextGuest.huesped} del ${formatDateEs(nextGuest.checkin)} al ${formatDateEs(nextGuest.checkout)} (${nextGuest.plataforma}).`;
           } else {
-            botResponse = `${DN[cNum]} está completamente libre hoy y no tiene reservas registradas en los próximos días.`;
+            estadoTexto = `• Estado hoy: Completamente libre.\n• Disponibilidad: No tiene reservas próximas registradas en el sistema.`;
           }
+
+          botResponse = `Información de ${cabinName}:\n\n${tipoTexto}\n\n${estadoTexto}`;
         } else {
-          botResponse = 'Los Bananos tiene 7 cabañas: Cabaña 1 a 6 para 4 huéspedes, y Cabaña 7 para 6 huéspedes. ¿De cuál querés información?';
+          // Información general de todas las cabañas
+          botResponse = 'Los Bananos cuenta con 7 cabañas:\n\n• Cabañas 2 y 3: Big (4 a 6 personas), amplias y familiares.\n• Cabaña 7: Tiny Jacuzzi (2 personas), exclusiva para parejas con hidromasaje.\n• Cabañas 5, 6, 8 y 9: Tiny Estándar (2 a 4 personas), funcionales y equipadas.\n\n¿De cuál te gustaría ver la disponibilidad o detalles?';
         }
       }
 
