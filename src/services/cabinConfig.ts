@@ -28,6 +28,19 @@ export const DN: Record<CabinCode, string> = {
   SA_te: 'Sin asignar (Tiny Estándar)',
 };
 
+export const SHORT_DN: Record<CabinCode, string> = {
+  C2: 'C2',
+  C3: 'C3',
+  C5: 'C5',
+  C6: 'C6',
+  C7: 'C7',
+  C8: 'C8',
+  C9: 'C9',
+  SA_big: 'S/A',
+  SA_tj: 'S/A',
+  SA_te: 'S/A',
+};
+
 export const TIPOS: Record<CabinType, string> = {
   big: 'Big (4 a 6 pax)',
   tj: 'Tiny Jacuzzi (2 pax)',

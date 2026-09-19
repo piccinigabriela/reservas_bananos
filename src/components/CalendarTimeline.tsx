@@ -4,6 +4,7 @@ import {
   CABANAS, 
   DC, 
   DN, 
+  SHORT_DN,
   TIPOS, 
   TIPO_DE_CABANA, 
   CABANAS_POR_TIPO,
@@ -331,10 +332,10 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
           <table className="w-full border-collapse select-none">
             <thead>
               <tr className={isDarkMode ? 'bg-[#0E1013] text-[#94A3B8]' : 'bg-[#1E293B] text-[#F1F5F9]'}>
-                <th className={`sticky left-0 z-20 px-3 py-3 text-left font-bold text-xs sm:text-sm uppercase tracking-wider w-36 sm:w-44 border-r shadow-[2px_0_5px_rgba(0,0,0,0.15)] ${
+                <th className={`sticky left-0 z-20 px-2 py-3 text-center font-bold text-xs uppercase tracking-wider w-14 sm:w-20 border-r shadow-[2px_0_5px_rgba(0,0,0,0.15)] ${
                   isDarkMode ? 'bg-[#0E1013] border-[#2D3540]' : 'bg-[#1E293B] border-[#334155]'
                 }`}>
-                  Cabaña
+                  Cab
                 </th>
                 {days.map(d => (
                   <th
@@ -372,19 +373,22 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       isDarkMode ? 'hover:bg-[#161A20]' : 'hover:bg-[#F8FAFC]'
                     }`}
                   >
-                    {/* Columna Cabaña Sticky */}
-                    <td className={`sticky left-0 z-10 px-3 py-2.5 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${
-                      isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-white border-[#E2E8F0]'
-                    }`}>
-                      <div className="flex items-center gap-2">
+                    {/* Columna Cabaña Sticky Compacta */}
+                    <td 
+                      title={DN[cabinCode] || cabinCode}
+                      className={`sticky left-0 z-10 px-1.5 sm:px-2.5 py-2.5 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${
+                        isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-white border-[#E2E8F0]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5">
                         <span
-                          className="w-3.5 h-3.5 rounded-xs shrink-0"
+                          className="w-2.5 h-2.5 rounded-xs shrink-0"
                           style={{ backgroundColor: cabinColor }}
                         />
-                        <span className={`font-semibold text-xs sm:text-sm truncate ${
+                        <span className={`font-bold text-xs sm:text-sm tracking-wide ${
                           isDarkMode ? 'text-[#F1F5F9]' : 'text-[#0F172A]'
                         } ${isDyslexiaMode ? 'font-bold' : ''}`}>
-                          {cabinName}
+                          {SHORT_DN[cabinCode] || cabinCode}
                         </span>
                       </div>
                     </td>
