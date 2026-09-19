@@ -24,8 +24,10 @@ import {
   Lock, 
   CheckCircle2, 
   AlertCircle,
-  Tag
+  Tag,
+  Send
 } from 'lucide-react';
+import { getTelegramConfig, sendTelegramMessage, formatTelegramCheckin } from '../services/telegramService';
 
 interface FichaReservaModalProps {
   reserva: Reserva | null;
@@ -70,6 +72,29 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
     const cleanTel = reserva.tel.replace(/\D/g, '');
     const msg = `Hola ${reserva.huesped}! Te escribimos de Cabañas Los Bananos en Puerto Iguazú para confirmar tu estadía del ${formatDateEs(reserva.checkin)} al ${formatDateEs(reserva.checkout)}.`;
     window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const [tgLoading, setTgLoading] = React.useState(false);
+  const [tgSuccess, setTgSuccess] = React.useState(false);
+
+  const handleSendTelegram = async () => {
+    const cfg = getTelegramConfig();
+    if (!cfg.botToken || !cfg.chatId) {
+      alert('Configurá primero tu bot de Telegram en la pestaña Avisos.');
+      return;
+    }
+
+    setTgLoading(true);
+    const text = formatTelegramCheckin(reserva);
+    const res = await sendTelegramMessage(cfg.botToken, cfg.chatId, text);
+    setTgLoading(false);
+
+    if (res.success) {
+      setTgSuccess(true);
+      setTimeout(() => setTgSuccess(false), 3000);
+    } else {
+      alert(`Error al enviar a Telegram: ${res.error}`);
+    }
   };
 
   return (
@@ -288,6 +313,19 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
               >
                 <MessageSquare className="w-4 h-4" />
                 <span>Enviar WhatsApp</span>
+              </button>
+            )}
+
+            {/* Notificar a Telegram */}
+            {!isIcal && (
+              <button
+                onClick={handleSendTelegram}
+                disabled={tgLoading}
+                className="py-2.5 px-3.5 bg-[#0088cc] hover:bg-[#0077b5] text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                title="Enviar aviso a Telegram"
+              >
+                <Send className="w-4 h-4" />
+                <span>{tgSuccess ? '¡Enviado! ✓' : tgLoading ? 'Enviando...' : 'Telegram'}</span>
               </button>
             )}
 
