@@ -46,12 +46,12 @@ export const AssignCabinModal: React.FC<AssignCabinModalProps> = ({
   const noches = nightsCount(reserva.checkin, reserva.checkout);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-md my-auto max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
-        <div className="bg-[#D97706] px-5 py-4 text-white flex items-center justify-between">
+        <div className="bg-[#D97706] px-4 sm:px-5 py-3.5 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Home className="w-5 h-5" />
             <h2 className="text-base sm:text-lg font-bold">
@@ -66,7 +66,7 @@ export const AssignCabinModal: React.FC<AssignCabinModalProps> = ({
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-sm text-[#443527]">
+        <div className="p-4 sm:p-5 space-y-4 text-sm text-[#443527] overflow-y-auto flex-1">
           {/* Ficha rápida de la reserva */}
           <div className="bg-white border border-[#E5D7C5] p-3.5 rounded-xl space-y-1">
             <div className="font-bold text-[#2A2118] text-base">

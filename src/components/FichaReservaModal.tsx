@@ -98,14 +98,14 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-lg my-auto max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         {/* Encabezado con color de la cabaña */}
         <div 
-          className="px-5 py-4 text-white flex items-center justify-between"
+          className="px-4 sm:px-5 py-3.5 text-white flex items-center justify-between shrink-0"
           style={{ backgroundColor: cabinColor }}
         >
           <div className="flex items-center gap-2.5">
@@ -130,15 +130,15 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
 
           <button
             onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition active:scale-90"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition active:scale-90"
             title="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Cuerpo de la ficha */}
-        <div className={`p-5 sm:p-6 space-y-5 ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
+        {/* Cuerpo de la ficha con scroll vertical asegurado */}
+        <div className={`p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1 ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
           {/* Si es un bloqueo iCal */}
           {isIcal ? (
             <div className="bg-[#FAF3EA] border-2 border-[#D69654] rounded-xl p-4 text-center space-y-3">

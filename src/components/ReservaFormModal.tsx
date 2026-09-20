@@ -147,39 +147,41 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-xl my-6 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-xl my-auto max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
-        {/* Encabezado */}
-        <div className="bg-[#2A2118] px-5 py-4 text-white flex items-center justify-between border-b border-[#47382A]">
-          <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+        {/* Encabezado fijo superior */}
+        <div className="bg-[#2A2118] px-4 sm:px-5 py-3.5 text-white flex items-center justify-between border-b border-[#47382A] shrink-0">
+          <h2 className="text-base sm:text-xl font-bold flex items-center gap-2">
             <span>{initialData ? '✏️ Modificar Reserva' : '➕ Nueva Reserva'}</span>
           </h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition active:scale-90"
+            title="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className={`p-5 sm:p-6 space-y-5 ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
-          {errorMessage && (
-            <div className="bg-[#FFF0ED] border-2 border-[#E0533C] text-[#9A220E] px-4 py-3 rounded-xl text-xs sm:text-sm flex items-start gap-2.5">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+        {/* Formulario con scroll vertical garantizado */}
+        <form onSubmit={handleSubmit} className={`flex flex-col overflow-y-auto flex-1 ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+            {errorMessage && (
+              <div className="bg-[#FFF0ED] border-2 border-[#E0533C] text-[#9A220E] px-4 py-3 rounded-xl text-xs sm:text-sm flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
 
-          {/* Bloque 1: Cabaña y Fechas */}
-          <div className="bg-white border border-[#E5D7C5] rounded-xl p-4 space-y-3 shadow-xs">
-            <h3 className="text-xs uppercase tracking-wider font-bold text-[#8C765C] flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-[#D2502A]" />
-              <span>1. Cabaña y Fechas</span>
-            </h3>
+            {/* Bloque 1: Cabaña y Fechas */}
+            <div className="bg-white border border-[#E5D7C5] rounded-xl p-3.5 sm:p-4 space-y-3 shadow-xs">
+              <h3 className="text-xs uppercase tracking-wider font-bold text-[#8C765C] flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-[#D2502A]" />
+                <span>1. Cabaña y Fechas</span>
+              </h3>
 
             <div>
               <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
@@ -500,19 +502,21 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
             </div>
           </div>
 
-          {/* Botones de acción */}
-          <div className="flex gap-3 pt-2">
+          </div>
+
+          {/* Botones de acción fijados abajo para que siempre estén visibles y cómodos */}
+          <div className="bg-[#FAF4EB] border-t border-[#E5D7C5] p-3 sm:p-4 flex gap-2 sm:gap-3 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 px-4 bg-[#E8DDD0] hover:bg-[#DDD0C0] text-[#423223] font-semibold text-sm rounded-xl transition text-center"
+              className="flex-1 py-2.5 sm:py-3 px-3 sm:px-4 bg-[#E8DDD0] hover:bg-[#DDD0C0] text-[#423223] font-semibold text-xs sm:text-sm rounded-xl transition text-center"
             >
               Cancelar
             </button>
 
             <button
               type="submit"
-              className="flex-2 py-3 px-6 bg-[#D2502A] hover:bg-[#E55B33] text-white font-bold text-sm sm:text-base rounded-xl transition shadow-md text-center transform active:scale-95"
+              className="flex-2 py-2.5 sm:py-3 px-4 sm:px-6 bg-[#D2502A] hover:bg-[#E55B33] text-white font-bold text-xs sm:text-base rounded-xl transition shadow-md text-center transform active:scale-95"
             >
               Guardar Reserva ✓
             </button>
