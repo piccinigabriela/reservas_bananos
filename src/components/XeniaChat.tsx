@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Reserva, Gasto, CabinCode } from '../types';
-import { DN, calcFinancials, formatMoney, formatDateEs, CABANAS } from '../services/cabinConfig';
+import { DN, calcFinancials, formatMoney, formatDateEs, CABANAS, getTipoCambioVal } from '../services/cabinConfig';
 import { 
   X, 
   Send, 
@@ -626,7 +626,115 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
       else if (qLower.includes('google') || qLower.includes('csv') || qLower.includes('importar') || qLower.includes('sincroniz')) {
         botResponse = 'Para cargar tu Google Calendar:\n1. Arriba a la derecha tocá el botón Google Calendar.\n2. Subí tu archivo .CSV exportado de Google Calendar.\n3. Vas a ver la vista previa con cada evento asignado a su cabaña. Si querés corregís algo y tocás Importar Reservas para que queden registradas.';
       }
-      // 9. Consulta por cabañas (individual o general)
+      // 9. Rendimiento, Ganancias, Finanzas y Balance (PRIORIDAD SOBRE LISTADO DE CABAÑAS)
+      else if (
+        qLower.includes('rendimiento') || 
+        qLower.includes('ganancia') || 
+        qLower.includes('ganancias') || 
+        qLower.includes('ingreso') || 
+        qLower.includes('ingresos') || 
+        qLower.includes('facturac') || 
+        qLower.includes('recaudac') || 
+        qLower.includes('balance') || 
+        qLower.includes('cuanto gener') || 
+        qLower.includes('cuánto gener') || 
+        qLower.includes('cuanta plata') || 
+        qLower.includes('cuánta plata') || 
+        qLower.includes('cuanto ingres') || 
+        qLower.includes('cuánto ingres') || 
+        (qLower.includes('cuanto') && qLower.includes('mes')) || 
+        (qLower.includes('cuánto') && qLower.includes('mes'))
+      ) {
+        // Detectar si el usuario especificó un mes puntual
+        const mesesNombres = [
+          'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+          'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+        ];
+        let targetMonthIndex = new Date().getMonth();
+        let targetMonthName = mesesNombres[targetMonthIndex];
+        let targetYear = new Date().getFullYear();
+
+        for (let i = 0; i < mesesNombres.length; i++) {
+          if (qLower.includes(mesesNombres[i])) {
+            targetMonthIndex = i;
+            targetMonthName = mesesNombres[i];
+            break;
+          }
+        }
+
+        // Si incluye setiembre (variante común en Argentina)
+        if (qLower.includes('setiembre')) {
+          targetMonthIndex = 8;
+          targetMonthName = 'septiembre';
+        }
+
+        // Filtrar reservas válidas para ese mes y año (excluyendo canceladas e icalUid externas para cálculo limpio)
+        const mesReservas = reservas.filter(r => {
+          if (r.estado === 'Cancelada' || r.estado === 'Non show' || !!r.icalUid) return false;
+          if (!r.checkin) return false;
+          const [y, m] = r.checkin.split('-').map(Number);
+          return m - 1 === targetMonthIndex && y === targetYear;
+        });
+
+        // Gastos de ese mes
+        const mesGastos = gastos.filter(g => {
+          if (!g.fecha) return false;
+          const [y, m] = g.fecha.split('-').map(Number);
+          return m - 1 === targetMonthIndex && y === targetYear;
+        });
+
+        const totalBruto = mesReservas.reduce((s, r) => s + calcFinancials(r).subTotal, 0);
+        const totalCom = mesReservas.reduce((s, r) => s + calcFinancials(r).com, 0);
+        const totalLiq = mesReservas.reduce((s, r) => s + calcFinancials(r).liq, 0);
+        const totalGasto = mesGastos.reduce((s, g) => s + (g.monto || 0), 0);
+        const resultadoNeto = totalLiq - totalGasto;
+        const totalNoches = mesReservas.reduce((s, r) => s + calcFinancials(r).n, 0);
+        const tc = getTipoCambioVal();
+
+        const mesCapitalizado = targetMonthName.charAt(0).toUpperCase() + targetMonthName.slice(1);
+
+        // Desglose por cada una de las cabañas
+        const desgloseCabanas = CABANAS.map(c => {
+          const deptoRes = mesReservas.filter(r => r.depto === c);
+          const sub = deptoRes.reduce((s, r) => s + calcFinancials(r).subTotal, 0);
+          const liq = deptoRes.reduce((s, r) => s + calcFinancials(r).liq, 0);
+          const noches = deptoRes.reduce((s, r) => s + calcFinancials(r).n, 0);
+          return {
+            codigo: c,
+            nombre: DN[c],
+            reservas: deptoRes.length,
+            noches,
+            sub,
+            liq
+          };
+        });
+
+        if (mesReservas.length === 0) {
+          botResponse = `En ${mesCapitalizado} de ${targetYear} todavía no tenés reservas con ingresos computados.\n\n` +
+            `• Gastos registrados: ${formatMoney(totalGasto)}\n` +
+            `• Saldo neto: ${formatMoney(-totalGasto)}\n\n` +
+            `A medida que se carguen reservas para este mes vas a ver acá el rendimiento cabaña por cabaña.`;
+        } else {
+          const lineasDesglose = desgloseCabanas.map(d => {
+            if (d.reservas === 0) {
+              return `• ${d.nombre}: sin reservas aún.`;
+            }
+            return `• ${d.nombre}: ${formatMoney(d.liq)} líquido (${d.reservas} ${d.reservas === 1 ? 'reserva' : 'reservas'}, ${d.noches} noches)`;
+          }).join('\n');
+
+          const aproxUsd = tc > 0 ? ` (≈ USD ${Math.round(resultadoNeto / tc).toLocaleString('es-AR')})` : '';
+
+          botResponse = `📊 Rendimiento de ${mesCapitalizado} ${targetYear}:\n\n` +
+            `• Ingresos Brutos: ${formatMoney(totalBruto)}\n` +
+            `• Comisiones (Airbnb/Booking): -${formatMoney(totalCom)}\n` +
+            `• Líquido Reservas: ${formatMoney(totalLiq)}\n` +
+            (totalGasto > 0 ? `• Gastos Operativos: -${formatMoney(totalGasto)}\n` : '') +
+            `• Resultado Neto: ${formatMoney(resultadoNeto)}${aproxUsd}\n` +
+            `• Noches vendidas: ${totalNoches} noches en ${mesReservas.length} reservas\n\n` +
+            `Desglose por cabaña:\n${lineasDesglose}`;
+        }
+      }
+      // 10. Consulta por cabañas (individual o general)
       else if (
         qLower.includes('cabaña') || 
         qLower.includes('cabana') || 
@@ -721,21 +829,6 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         } else {
           botResponse = `Hoy tenés ${libres.length} cabañas libres de las 7. Las disponibles son: ${libres.map(c => DN[c]).join(', ')}.`;
         }
-      }
-      else if (
-        qLower.includes('cuanto') || qLower.includes('mes') || qLower.includes('gener') || 
-        qLower.includes('ingreso') || qLower.includes('plata') || qLower.includes('rendimiento') || 
-        qLower.includes('ganancia') || qLower.includes('dinero') || qLower.includes('balance')
-      ) {
-        const currentM = new Date().getMonth();
-        const currentY = new Date().getFullYear();
-        const em = reservas.filter(r => {
-          if (r.estado === 'Cancelada' || r.estado === 'Non show' || !!r.icalUid) return false;
-          const d = new Date(r.checkin);
-          return d.getMonth() === currentM && d.getFullYear() === currentY;
-        });
-        const liqTotal = em.reduce((s, r) => s + calcFinancials(r).liq, 0);
-        botResponse = `En lo que va del mes, el líquido neto generado para vos por las cabañas es de ${formatMoney(liqTotal)} en ${em.length} reservas activas.`;
       }
       else if (qLower.includes('pago') || qLower.includes('pendiente') || qLower.includes('saldo') || qLower.includes('cobrar') || qLower.includes('debe')) {
         const conSaldo = reservas.filter(r => {
