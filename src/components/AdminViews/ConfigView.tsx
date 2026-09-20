@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CABANAS, DN, DC, DEFAULT_PINS, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal } from '../../services/cabinConfig';
 import { Reserva } from '../../types';
 import { downloadIcsFile } from '../../services/icalExport';
-import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink } from 'lucide-react';
+import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle } from 'lucide-react';
 
 interface ConfigViewProps {
   reservas: Reserva[];
@@ -10,6 +10,7 @@ interface ConfigViewProps {
   isSyncing: boolean;
   onDownloadBackup: () => void;
   onRestoreBackup: (file: File) => void;
+  onClearAllReservas?: () => void;
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
@@ -18,6 +19,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   isSyncing,
   onDownloadBackup,
   onRestoreBackup,
+  onClearAllReservas,
 }) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   // PINs
@@ -358,6 +360,34 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               }}
             />
           </label>
+        </div>
+      </div>
+
+      {/* Zona de Mantenimiento de Datos */}
+      <div className="bg-[#FFF5F5] border border-[#FCA5A5] rounded-xl p-5 shadow-xs space-y-3">
+        <h3 className="text-sm font-bold text-[#991B1B] flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+          <span>Mantenimiento y Limpieza de Datos</span>
+        </h3>
+        <p className="text-xs text-[#7F1D1D] leading-relaxed">
+          Si vas a cargar un nuevo archivo CSV o .ics que ya contiene todas tus reservas anteriores y no querés que se superpongan ni dupliquen, podés vaciar todas las reservas previas.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="text-xs font-semibold text-[#991B1B]">
+            Estado actual: <strong>{reservas.length} reservas registradas</strong>
+          </div>
+
+          {onClearAllReservas && (
+            <button
+              onClick={onClearAllReservas}
+              disabled={reservas.length === 0}
+              className="px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] disabled:bg-[#FCA5A5] text-white font-bold text-xs sm:text-sm rounded-xl transition flex items-center gap-2 shadow-xs"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Vaciar todas las reservas previas</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

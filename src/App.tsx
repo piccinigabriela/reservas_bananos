@@ -14,6 +14,7 @@ import { FichaReservaModal } from './components/FichaReservaModal';
 import { ReservaFormModal } from './components/ReservaFormModal';
 import { AssignCabinModal } from './components/AssignCabinModal';
 import { GoogleCalendarImportModal } from './components/GoogleCalendarImportModal';
+import { ConfirmClearReservasModal } from './components/ConfirmClearReservasModal';
 import { UnlockAdminModal } from './components/UnlockAdminModal';
 import { PinLogin } from './components/PinLogin';
 import { XeniaChat } from './components/XeniaChat';
@@ -62,6 +63,7 @@ export default function App() {
   const [isNewReservaOpen, setIsNewReservaOpen] = useState<boolean>(false);
   const [assigningReserva, setAssigningReserva] = useState<Reserva | null>(null);
   const [isGoogleCalendarOpen, setIsGoogleCalendarOpen] = useState<boolean>(false);
+  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState<boolean>(false);
   const [isUnlockAdminOpen, setIsUnlockAdminOpen] = useState<boolean>(false);
 
   // Toast
@@ -210,12 +212,30 @@ export default function App() {
     setEditingReserva(convertedRes);
   };
 
-  // Importar reservas desde Google Calendar CSV
-  const handleImportGoogleCalendar = async (newReservas: Reserva[]) => {
-    const updated = [...reservas, ...newReservas];
+  // Importar reservas desde Google Calendar (.ics o .csv)
+  const handleImportGoogleCalendar = async (newReservas: Reserva[], mode: 'replace' | 'append' = 'replace') => {
+    let updated: Reserva[];
+    if (mode === 'replace') {
+      updated = newReservas;
+    } else {
+      const existingKeys = new Set(reservas.map(r => `${r.depto}_${r.checkin}`));
+      const nonDuplicates = newReservas.filter(r => !existingKeys.has(`${r.depto}_${r.checkin}`));
+      updated = [...reservas, ...nonDuplicates];
+    }
     setReservas(updated);
     await saveReservas(updated);
-    showToast(`Se importaron ${newReservas.length} reservas de Google Calendar ✓`);
+    showToast(
+      mode === 'replace'
+        ? `Se reemplazaron todas las reservas con ${newReservas.length} reservas del archivo ✓`
+        : `Se importaron ${newReservas.length} reservas ✓`
+    );
+  };
+
+  // Vaciar todas las reservas previas
+  const handleClearAllReservas = async () => {
+    setReservas([]);
+    await saveReservas([]);
+    showToast('Todas las reservas han sido eliminadas ✓');
   };
 
   // Agregar Gasto
@@ -360,9 +380,8 @@ export default function App() {
                     }}
                     onDeleteReserva={handleDeleteReserva}
                     onAssignCabin={res => setAssigningReserva(res)}
-                    onImportCsv={async () => {
-                      setIsGoogleCalendarOpen(true);
-                    }}
+                    onImportCsv={() => setIsGoogleCalendarOpen(true)}
+                    onClearAllReservas={() => setIsConfirmClearOpen(true)}
                   />
                 )}
 
@@ -388,6 +407,7 @@ export default function App() {
                     isSyncing={isSyncingIcal}
                     onDownloadBackup={handleDownloadBackup}
                     onRestoreBackup={handleRestoreBackup}
+                    onClearAllReservas={() => setIsConfirmClearOpen(true)}
                   />
                 )}
               </>
@@ -435,12 +455,22 @@ export default function App() {
         existingReservas={reservas}
       />
 
-      {/* Modal: Cargar Google Calendar CSV */}
+      {/* Modal: Cargar Google Calendar / .ics / CSV */}
       <GoogleCalendarImportModal
         isOpen={isGoogleCalendarOpen}
         onClose={() => setIsGoogleCalendarOpen(false)}
         onImport={handleImportGoogleCalendar}
-        existingReservas={reservas}
+        existingReservasCount={reservas.length}
+        onDownloadBackup={handleDownloadBackup}
+      />
+
+      {/* Modal: Confirmación para vaciar todas las reservas */}
+      <ConfirmClearReservasModal
+        isOpen={isConfirmClearOpen}
+        onClose={() => setIsConfirmClearOpen(false)}
+        onConfirm={handleClearAllReservas}
+        count={reservas.length}
+        onDownloadBackup={handleDownloadBackup}
       />
 
       {/* Modal: Desbloquear Modo Propietario */}

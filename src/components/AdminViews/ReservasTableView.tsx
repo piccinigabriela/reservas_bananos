@@ -29,7 +29,8 @@ interface ReservasTableViewProps {
   onEditReserva: (r: Reserva) => void;
   onDeleteReserva: (id: string) => void;
   onAssignCabin: (r: Reserva) => void;
-  onImportCsv: (file: File) => void;
+  onImportCsv: () => void;
+  onClearAllReservas?: () => void;
 }
 
 export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
@@ -38,6 +39,7 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
   onDeleteReserva,
   onAssignCabin,
   onImportCsv,
+  onClearAllReservas,
 }) => {
   const [filterDepto, setFilterDepto] = useState<string>('');
   const [filterEstado, setFilterEstado] = useState<string>('');
@@ -270,21 +272,25 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
               <span>PDF</span>
             </button>
 
-            <label className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-[#2A2118] text-white hover:bg-[#3D3023] rounded-lg transition cursor-pointer">
-              <Upload className="w-3.5 h-3.5" />
+            <button
+              onClick={onImportCsv}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#2A2118] text-white hover:bg-[#3D3023] rounded-lg transition shadow-xs"
+              title="Cargar archivo .ics o .csv de Google Calendar o planilla"
+            >
+              <Upload className="w-3.5 h-3.5 text-[#E5D7C5]" />
               <span>Importar</span>
-              <input
-                type="file"
-                accept=".csv,.xlsx"
-                className="hidden"
-                onChange={e => {
-                  if (e.target.files?.[0]) {
-                    onImportCsv(e.target.files[0]);
-                    e.target.value = '';
-                  }
-                }}
-              />
-            </label>
+            </button>
+
+            {onClearAllReservas && reservas.length > 0 && (
+              <button
+                onClick={onClearAllReservas}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5] rounded-lg transition"
+                title="Vaciar todas las reservas previas"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Vaciar</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
