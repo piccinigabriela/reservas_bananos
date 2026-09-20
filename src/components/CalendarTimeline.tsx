@@ -422,130 +422,134 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0.5 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
                           >
-                            <div className="h-full w-full rounded-xs flex overflow-hidden border border-white/30 shadow-xs">
-                              {/* Mitad Izquierda: SALIDA MAÑANA (OUT) */}
+                            <div className="h-9 w-full flex items-stretch">
+                              {/* Mitad Izquierda: TERMINA BARRA DE SALIDA (OUT MAÑANA) */}
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (isIcalOut && onConvertIcalBlock) onConvertIcalBlock(checkoutRes);
                                   else onSelectReserva(checkoutRes);
                                 }}
-                                className="w-1/2 h-full flex flex-col items-center justify-center text-white px-0.5 cursor-pointer hover:brightness-125 transition border-r border-white/40"
+                                className="w-1/2 h-full flex items-center justify-end pr-1 text-white cursor-pointer hover:brightness-125 transition rounded-r-md border-y border-l border-white/20 shadow-xs"
                                 style={{ backgroundColor: bgOut }}
-                                title={`SALIDA MAÑANA: ${checkoutRes.huesped} (${checkoutRes.plataforma}) - Tocar para ver`}
+                                title={`Check-out: ${checkoutRes.huesped} (${checkoutRes.plataforma})`}
                               >
-                                <span className="text-[7.5px] font-black uppercase tracking-wider opacity-85 leading-none">OUT</span>
-                                <span className="text-[9.5px] font-bold truncate max-w-full leading-tight">{guestOut}</span>
+                                <span className="text-[8px] font-black uppercase tracking-wider opacity-90 leading-none">◀ OUT</span>
                               </div>
 
-                              {/* Mitad Derecha: ENTRADA TARDE (IN) */}
+                              {/* Espacio sutil de separación visual entre checkout y checkin */}
+                              <div className="w-1 shrink-0" />
+
+                              {/* Mitad Derecha: INICIA BARRA DE ENTRADA (IN TARDE) */}
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (isIcalIn && onConvertIcalBlock) onConvertIcalBlock(res);
                                   else onSelectReserva(res);
                                 }}
-                                className="w-1/2 h-full flex flex-col items-center justify-center text-white px-0.5 cursor-pointer hover:brightness-125 transition"
+                                className="w-1/2 h-full flex items-center justify-start pl-1 text-white cursor-pointer hover:brightness-125 transition rounded-l-md border-y border-r border-white/20 shadow-xs"
                                 style={{ backgroundColor: bgIn }}
-                                title={`ENTRADA TARDE: ${res.huesped} (${res.plataforma}) - Tocar para ver`}
+                                title={`Check-in: ${res.huesped} (${res.plataforma})`}
                               >
-                                <span className="text-[7.5px] font-black uppercase tracking-wider opacity-85 leading-none">IN</span>
-                                <span className="text-[9.5px] font-bold truncate max-w-full leading-tight">{guestIn}</span>
+                                <span className="text-[8px] font-black uppercase tracking-wider opacity-90 leading-none">IN ▶</span>
                               </div>
                             </div>
                           </td>
                         );
                       }
 
-                      // CASO 2: DÍA DE ENTRADA (CHECK-IN) SIN CHECK-OUT PREVIO (MAÑANA LIBRE, TARDE IN)
+                      // CASO 2: DÍA DE ENTRADA (CHECK-IN) SIN CHECK-OUT PREVIO (MAÑANA LIBRE, TARDE INICIA BARRA)
                       if (res && res.checkin === d.iso) {
                         const isIcal = !!res.icalUid;
                         let bgStyle = PLATAFORMA_COLORES[res.plataforma] || '#4B5563';
                         if (isIcal) bgStyle = '#475569';
                         const guestFirstName = res.huesped.split(' ')[0] || 'Reserva';
+                        const nights = nightsCount(res.checkin, res.checkout);
 
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0.5 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
                           >
-                            <div className="h-full w-full rounded-xs flex overflow-hidden border border-white/20 shadow-2xs">
-                              {/* Mañana libre */}
-                              <div className={`w-1/3 h-full flex items-center justify-center text-[8px] font-semibold ${
-                                isDarkMode ? 'bg-[#12151A]/60 text-[#64748B]' : 'bg-slate-100 text-slate-400'
-                              }`}>
-                                Libre
+                            <div className="h-9 w-full flex items-stretch">
+                              {/* Mitad izquierda libre antes del check-in */}
+                              <div className="w-[30%] h-full flex items-center justify-center text-[8px] font-semibold opacity-30">
+                                ·
                               </div>
-                              {/* Tarde IN */}
+                              {/* Barra continua que arranca aquí (extremo izquierdo redondeado) */}
                               <div
                                 onClick={() => {
                                   if (isIcal && onConvertIcalBlock) onConvertIcalBlock(res);
                                   else onSelectReserva(res);
                                 }}
-                                className="w-2/3 h-full flex flex-col items-center justify-center text-white px-1 cursor-pointer hover:brightness-110 transition border-l border-white/40"
+                                className="w-[70%] h-full flex items-center gap-1 pl-1.5 pr-0.5 text-white cursor-pointer hover:brightness-110 transition rounded-l-lg border-y border-l border-white/25 shadow-xs"
                                 style={{ backgroundColor: bgStyle }}
-                                title={`Check-in hoy: ${res.huesped} - Tocar para ver`}
+                                title={`Llegada: ${res.huesped} (${nights} noches)`}
                               >
-                                <div className="flex items-center gap-1 leading-none">
-                                  <span className="text-[7.5px] font-black opacity-85">IN</span>
-                                  {isIcal && <Lock className="w-2.5 h-2.5" />}
-                                </div>
-                                <span className="text-[10px] font-bold truncate max-w-full leading-tight">
-                                  {guestFirstName}
+                                <span className="text-[7.5px] font-black opacity-90 tracking-tighter shrink-0 bg-black/25 px-1 py-0.5 rounded-xs">
+                                  IN
                                 </span>
+                                {isIcal ? (
+                                  <Lock className="w-2.5 h-2.5 shrink-0" />
+                                ) : (
+                                  <span className="text-[10.5px] font-extrabold truncate leading-none text-left drop-shadow-xs">
+                                    {guestFirstName}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </td>
                         );
                       }
 
-                      // CASO 3: DÍA DE SALIDA (CHECK-OUT) SIN NUEVO CHECK-IN (MAÑANA OUT, TARDE LIBRE)
+                      // CASO 3: DÍA DE SALIDA (CHECK-OUT) SIN NUEVO CHECK-IN (BARRA LLEGA HASTA LA MAÑANA Y TERMINA)
                       if (checkoutRes && !res) {
                         const isIcalOut = !!checkoutRes.icalUid;
                         let bgOut = PLATAFORMA_COLORES[checkoutRes.plataforma] || '#4B5563';
                         if (isIcalOut) bgOut = '#475569';
-                        const guestOut = checkoutRes.huesped.split(' ')[0] || 'Salida';
 
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0.5 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
                           >
-                            <div className="h-full w-full rounded-xs flex overflow-hidden border border-white/20 shadow-2xs">
-                              {/* Mañana OUT */}
+                            <div className="h-9 w-full flex items-stretch">
+                              {/* Barra que termina aquí en la mañana (extremo derecho redondeado) */}
                               <div
                                 onClick={() => {
                                   if (isIcalOut && onConvertIcalBlock) onConvertIcalBlock(checkoutRes);
                                   else onSelectReserva(checkoutRes);
                                 }}
-                                className="w-2/3 h-full flex flex-col items-center justify-center text-white px-1 cursor-pointer hover:brightness-110 transition border-r border-white/40"
+                                className="w-[70%] h-full flex items-center justify-end pr-1.5 text-white cursor-pointer hover:brightness-110 transition rounded-r-lg border-y border-r border-white/25 shadow-xs"
                                 style={{ backgroundColor: bgOut }}
-                                title={`Check-out mañana: ${checkoutRes.huesped} - Tocar para ver`}
+                                title={`Salida mañana: ${checkoutRes.huesped}`}
                               >
-                                <span className="text-[7.5px] font-black opacity-85 leading-none">OUT</span>
-                                <span className="text-[10px] font-bold truncate max-w-full leading-tight">
-                                  {guestOut}
+                                <span className="text-[7.5px] font-black opacity-90 tracking-tighter shrink-0 bg-black/25 px-1 py-0.5 rounded-xs">
+                                  OUT ◀
                                 </span>
                               </div>
-                              {/* Tarde libre */}
-                              <div className={`w-1/3 h-full flex items-center justify-center text-[8px] font-semibold ${
-                                isDarkMode ? 'bg-[#12151A]/60 text-[#64748B]' : 'bg-slate-100 text-slate-400'
-                              }`}>
-                                Libre
+                              {/* Mitad derecha libre después del check-out */}
+                              <div className="w-[30%] h-full flex items-center justify-center text-[8px] font-semibold opacity-30">
+                                ·
                               </div>
                             </div>
                           </td>
                         );
                       }
 
-                      // CASO 4: ESTADÍA EN CURSO (DÍA COMPLETO OCUPADO)
+                      // CASO 4: ESTADÍA EN CURSO (DÍA COMPLETO OCUPADO - CUERPO DE LA BARRA CONTINUA)
                       if (res) {
                         const isIcal = !!res.icalUid;
                         const guestFirstName = res.huesped.split(' ')[0] || 'Reserva';
                         let bgStyle = PLATAFORMA_COLORES[res.plataforma] || '#4B5563';
                         if (isIcal) bgStyle = '#475569';
+
+                        // Calcular si es el 2do día para mostrar detalles o continuar la cinta limpia
+                        const checkinDate = new Date(res.checkin);
+                        const currDate = new Date(d.iso);
+                        const diffDays = Math.round((currDate.getTime() - checkinDate.getTime()) / (1000 * 60 * 60 * 24));
 
                         return (
                           <td
@@ -554,23 +558,29 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                               if (isIcal && onConvertIcalBlock) onConvertIcalBlock(res);
                               else onSelectReserva(res);
                             }}
-                            className={`p-0.5 border-r ${borderCell} h-12 text-center align-middle cursor-pointer ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle cursor-pointer ${dayBg}`}
                           >
                             <div
-                              className={`h-full w-full rounded-xs flex items-center justify-center px-1 text-white text-[11px] font-bold shadow-2xs transition hover:brightness-115 ${
-                                isIcal ? 'border border-dashed border-white/50' : ''
+                              className={`h-9 w-full flex items-center justify-center text-white text-[11px] font-bold border-y border-white/20 transition hover:brightness-110 shadow-xs ${
+                                isIcal ? 'border-b-2 border-dashed border-white/40' : ''
                               }`}
                               style={{ backgroundColor: bgStyle }}
                               title={`${res.huesped} (${formatDateEs(res.checkin)} a ${formatDateEs(res.checkout)})`}
                             >
                               {isIcal ? (
-                                <div className="flex items-center gap-0.5">
-                                  <Lock className="w-3 h-3 shrink-0" />
-                                  <span className="text-[10px] hidden sm:inline">iCal</span>
+                                <div className="flex items-center gap-0.5 opacity-80">
+                                  <Lock className="w-2.5 h-2.5 shrink-0" />
+                                  <span className="text-[9px] hidden sm:inline">iCal</span>
                                 </div>
                               ) : (
-                                <span className="truncate leading-tight">
-                                  {viewType === 'semana' ? `${guestFirstName} (${res.plataforma})` : guestFirstName}
+                                // Si es semana o si es el 2do día, muestra canal o info adicional; en los demás días la barra corre limpia
+                                <span className="truncate leading-tight px-1 drop-shadow-xs">
+                                  {diffDays === 1 
+                                    ? <span className="text-[9.5px] font-semibold opacity-95">({res.plataforma})</span>
+                                    : viewType === 'semana' 
+                                      ? <span className="text-[9.5px] opacity-75">· · ·</span>
+                                      : <span className="text-white/40 text-[9px] select-none">—</span>
+                                  }
                                 </span>
                               )}
                             </div>
