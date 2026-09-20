@@ -283,15 +283,58 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Botón de Descarga del feed .ics */}
+                  {/* Acciones de exportación iCal para Airbnb */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const baseUrl = window.location.origin;
+                        const url = `${baseUrl}/api/ical/${code}.ics`;
+                        navigator.clipboard.writeText(url);
+                        setCopiedCode(code);
+                        setTimeout(() => setCopiedCode(null), 2500);
+                      }}
+                      title="Copiar enlace directo para pegar en Airbnb (Paso 2)"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#D2502A] hover:bg-[#E55B33] text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer"
+                    >
+                      {copiedCode === code ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedCode === code ? '¡Enlace Copiado!' : 'Copiar Enlace para Airbnb'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => downloadIcsFile(code, reservas)}
+                      title="Descargar archivo .ics con todas las reservas de esta cabaña"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-amber-50 border border-[#D4C3AE] text-[#5A4838] text-xs font-semibold rounded-lg shadow-2xs transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Bajar .ics</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Enlace iCal directo para copiar o ver en pantalla */}
+                <div className="bg-white border border-amber-200 rounded-lg p-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                      Enlace para pegar en Airbnb (Paso 2):
+                    </span>
+                    <span className="text-xs font-mono text-[#2A2118] select-all break-all">
+                      {window.location.origin}/api/ical/{code}.ics
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => downloadIcsFile(code, reservas)}
-                    title="Descargar archivo .ics con todas las reservas de esta cabaña"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold rounded-lg shadow-2xs transition cursor-pointer"
+                    onClick={() => {
+                      const url = `${window.location.origin}/api/ical/${code}.ics`;
+                      navigator.clipboard.writeText(url);
+                      setCopiedCode(code);
+                      setTimeout(() => setCopiedCode(null), 2500);
+                    }}
+                    className="shrink-0 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs rounded-md border border-amber-300 transition cursor-pointer flex items-center gap-1"
                   >
-                    <Download className="w-3.5 h-3.5 text-[#D2502A]" />
-                    <span>Exportar iCal (.ics)</span>
+                    {copiedCode === code ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedCode === code ? '¡Copiado!' : 'Copiar'}</span>
                   </button>
                 </div>
 
