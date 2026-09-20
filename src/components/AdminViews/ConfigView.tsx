@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { CABANAS, DN, DC, DEFAULT_PINS, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal } from '../../services/cabinConfig';
+import { CABANAS, DN, DC, DEFAULT_PINS, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal, getFechaCorteCfg } from '../../services/cabinConfig';
 import { Reserva } from '../../types';
 import { downloadIcsFile } from '../../services/icalExport';
-import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle, Clock } from 'lucide-react';
 
 interface ConfigViewProps {
   reservas: Reserva[];
@@ -44,9 +44,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [comAirbnb, setComAirbnb] = useState<number>(() => getComisionesCfg().airbnb);
   const [comBooking, setComBooking] = useState<number>(() => getComisionesCfg().booking);
 
-  // Monedas
+  // Monedas y Corte Contable
   const [monedas, setMonedas] = useState(() => getMonedaPlatCfg());
   const [tipoCambio, setTipoCambio] = useState<number>(() => getTipoCambioVal());
+  const [fechaCorte, setFechaCorte] = useState<string>(() => getFechaCorteCfg());
 
   // iCal URLs
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>(() => {
@@ -74,6 +75,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     localStorage.setItem('bn_com', JSON.stringify({ airbnb: comAirbnb, booking: comBooking }));
     localStorage.setItem('bn_moneda_plat', JSON.stringify(monedas));
     localStorage.setItem('bn_tc', String(tipoCambio));
+    localStorage.setItem('bn_fecha_corte', fechaCorte.trim());
     localStorage.setItem('bn_ical', JSON.stringify(icalUrls));
 
     setSavedStatus('¡Configuración guardada con éxito! ✓');
@@ -227,6 +229,54 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <p className="text-[11px] text-[#8C765C] mt-1">
               Convierte automáticamente las reservas en USD (ej: Airbnb) a ARS en Rendimiento y totales.
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Fecha de Corte Contable / Inicio de Rendimientos */}
+      <div className="bg-white border-2 border-[#D2502A]/30 rounded-xl p-5 shadow-xs space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-[#2A2118] flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#D2502A]" />
+              <span>Fecha de Corte Contable (Inicio de Rendimientos)</span>
+            </h3>
+            <p className="text-xs text-[#7A6752] mt-1 max-w-2xl leading-relaxed">
+              Las reservas históricas anteriores a esta fecha se mantienen visibles en el calendario para evitar doble reserva, pero <strong>se excluyen de las estadísticas de Rendimiento y de las respuestas de Xenia</strong>. Así no necesitás completar los precios de cientos de reservas pasadas.
+            </p>
+          </div>
+          <span className="px-2.5 py-1 bg-[#FAF4EB] border border-[#E5D7C5] text-[#D2502A] font-bold text-xs rounded-full whitespace-nowrap">
+            Corte Activo
+          </span>
+        </div>
+
+        <div className="pt-2 flex flex-wrap items-center gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
+              Calcular rendimientos a partir de:
+            </label>
+            <input
+              type="date"
+              value={fechaCorte}
+              onChange={e => setFechaCorte(e.target.value)}
+              className="bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-sm font-bold text-[#2A2118] outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-2 mt-4 sm:mt-5">
+            <button
+              type="button"
+              onClick={() => setFechaCorte('2026-09-01')}
+              className="px-3 py-1.5 bg-[#FAF4EB] hover:bg-[#F3E7D7] border border-[#D4C3AE] text-[#4A3C2F] text-xs font-semibold rounded-lg transition"
+            >
+              Fijar 01/09/2026
+            </button>
+            <button
+              type="button"
+              onClick={() => setFechaCorte('')}
+              className="px-3 py-1.5 hover:bg-gray-100 border border-gray-300 text-gray-600 text-xs rounded-lg transition"
+            >
+              Sin límite (Todo el historial)
+            </button>
           </div>
         </div>
       </div>

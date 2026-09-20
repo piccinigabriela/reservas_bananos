@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Reserva, Gasto, CabinCode } from '../types';
-import { DN, calcFinancials, formatMoney, formatDateEs, CABANAS, getTipoCambioVal } from '../services/cabinConfig';
+import { DN, calcFinancials, formatMoney, formatDateEs, CABANAS, getTipoCambioVal, getFechaCorteCfg } from '../services/cabinConfig';
 import { 
   X, 
   Send, 
@@ -669,9 +669,11 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         }
 
         // Filtrar reservas válidas para ese mes y año (excluyendo canceladas e icalUid externas para cálculo limpio)
+        const fechaCorte = getFechaCorteCfg();
         const mesReservas = reservas.filter(r => {
           if (r.estado === 'Cancelada' || r.estado === 'Non show' || !!r.icalUid) return false;
           if (!r.checkin) return false;
+          if (fechaCorte && r.checkin < fechaCorte) return false;
           const [y, m] = r.checkin.split('-').map(Number);
           return m - 1 === targetMonthIndex && y === targetYear;
         });
@@ -679,6 +681,7 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         // Gastos de ese mes
         const mesGastos = gastos.filter(g => {
           if (!g.fecha) return false;
+          if (fechaCorte && g.fecha < fechaCorte) return false;
           const [y, m] = g.fecha.split('-').map(Number);
           return m - 1 === targetMonthIndex && y === targetYear;
         });

@@ -139,6 +139,14 @@ export function getTipoCambioVal(): number {
   return 1550;
 }
 
+export function getFechaCorteCfg(): string {
+  try {
+    const saved = localStorage.getItem('bn_fecha_corte');
+    if (saved) return saved.trim();
+  } catch (_) {}
+  return '2026-09-01'; // Por defecto 1 de septiembre de 2026
+}
+
 export function aARS(monto: number, plat: string): number {
   const mp = getMonedaPlatCfg();
   const moneda = mp[plat] || 'ARS';

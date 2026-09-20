@@ -8,9 +8,10 @@ import {
   formatMoney, 
   aARS,
   getTipoCambioVal,
-  nightsCount 
+  nightsCount,
+  getFechaCorteCfg
 } from '../../services/cabinConfig';
-import { Download, FileText, TrendingUp, ArrowLeft } from 'lucide-react';
+import { Download, FileText, TrendingUp, ArrowLeft, Clock } from 'lucide-react';
 
 interface RendimientoViewProps {
   reservas: Reserva[];
@@ -22,6 +23,7 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
   const currentYear = new Date().getFullYear();
   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth()));
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const fechaCorte = getFechaCorteCfg();
 
   const hasMonth = selectedMonth !== '';
   const monthNum = hasMonth ? parseInt(selectedMonth) : -1;
@@ -29,16 +31,23 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
   const EXCL = ['Cancelada', 'Cortesía', 'Non show', 'Stand by', 'Devolución'];
   const filteredReservas = reservas.filter(r => {
     if (EXCL.includes(r.estado) || !!r.icalUid) return false;
-    const d = new Date(r.checkin);
-    if (hasMonth && (d.getMonth() !== monthNum || d.getFullYear() !== selectedYear)) return false;
-    if (!hasMonth && d.getFullYear() !== selectedYear) return false;
+    if (!r.checkin) return false;
+    // Si hay fecha de corte configurada, excluir reservas con checkin anterior a esa fecha
+    if (fechaCorte && r.checkin < fechaCorte) return false;
+
+    const [y, m] = r.checkin.split('-').map(Number);
+    if (hasMonth && (m - 1 !== monthNum || y !== selectedYear)) return false;
+    if (!hasMonth && y !== selectedYear) return false;
     return true;
   });
 
   const filteredGastos = gastos.filter(g => {
-    const d = new Date(g.fecha);
-    if (hasMonth && (d.getMonth() !== monthNum || d.getFullYear() !== selectedYear)) return false;
-    if (!hasMonth && d.getFullYear() !== selectedYear) return false;
+    if (!g.fecha) return false;
+    if (fechaCorte && g.fecha < fechaCorte) return false;
+
+    const [y, m] = g.fecha.split('-').map(Number);
+    if (hasMonth && (m - 1 !== monthNum || y !== selectedYear)) return false;
+    if (!hasMonth && y !== selectedYear) return false;
     return true;
   });
 
@@ -240,6 +249,13 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
             <span className="text-[11px] font-bold text-[#7A6752]">Cambio:</span>
             <span className="text-xs font-bold text-[#D2502A]">1 USD = ${getTipoCambioVal().toLocaleString('es-AR')} ARS</span>
           </div>
+
+          {fechaCorte && (
+            <div className="bg-[#EFE2D2] border border-[#D4C3AE] px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs text-[#4A3C2F]" title="Las reservas anteriores a esta fecha se omiten de este balance contable">
+              <Clock className="w-3.5 h-3.5 text-[#D2502A]" />
+              <span>Corte contable: <strong>{fechaCorte.split('-').reverse().join('/')}</strong></span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
