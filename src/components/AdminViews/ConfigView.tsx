@@ -210,14 +210,23 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
-              Tipo de cambio (1 USD = ? ARS)
+              Tipo de cambio de referencia (1 USD = ? ARS)
             </label>
-            <input
-              type="number"
-              value={tipoCambio}
-              onChange={e => setTipoCambio(parseFloat(e.target.value) || 1200)}
-              className="bg-[#FAF5EE] border border-[#D4C3AE] rounded-lg px-3 py-1.5 text-sm font-bold text-[#2A2118] w-40"
-            />
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-[#8C765C]">$</span>
+              <input
+                type="number"
+                step="any"
+                value={tipoCambio}
+                onChange={e => setTipoCambio(parseFloat(e.target.value) || 0)}
+                placeholder="1550"
+                className="bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-sm font-bold text-[#2A2118] w-36 outline-none"
+              />
+              <span className="text-xs text-[#7A6752]">ARS</span>
+            </div>
+            <p className="text-[11px] text-[#8C765C] mt-1">
+              Convierte automáticamente las reservas en USD (ej: Airbnb) a ARS en Rendimiento y totales.
+            </p>
           </div>
         </div>
       </div>
@@ -320,13 +329,13 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                       Enlace para pegar en Airbnb (Paso 2):
                     </span>
                     <span className="text-xs font-mono text-[#2A2118] select-all break-all">
-                      {window.location.origin}/api/ical/{code}.ics
+                      https://bananos-ical.huuventa.workers.dev/{code}.ics
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const url = `${window.location.origin}/api/ical/${code}.ics`;
+                      const url = `https://bananos-ical.huuventa.workers.dev/${code}.ics`;
                       navigator.clipboard.writeText(url);
                       setCopiedCode(code);
                       setTimeout(() => setCopiedCode(null), 2500);

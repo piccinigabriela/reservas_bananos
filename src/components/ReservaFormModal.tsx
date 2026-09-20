@@ -360,10 +360,10 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                 <input
                   type="number"
                   min="0"
-                  step="100"
+                  step="any"
                   value={precio}
                   onChange={e => setPrecio(e.target.value)}
-                  placeholder="Ej: 60000"
+                  placeholder="Ej: 35 o 60000"
                   className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm sm:text-base font-bold text-[#2A2118] outline-none"
                   required
                 />
@@ -415,6 +415,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                 <input
                   type="number"
                   min="0"
+                  step="any"
                   value={sena}
                   onChange={e => setSena(e.target.value)}
                   placeholder="0"
@@ -429,6 +430,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                 <input
                   type="number"
                   min="0"
+                  step="any"
                   value={saldo}
                   onChange={e => setSaldo(e.target.value)}
                   placeholder="0"

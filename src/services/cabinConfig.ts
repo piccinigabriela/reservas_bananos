@@ -134,9 +134,9 @@ export function getMonedaPlatCfg(): Record<string, string> {
 export function getTipoCambioVal(): number {
   try {
     const saved = localStorage.getItem('bn_tc');
-    if (saved) return parseFloat(saved) || 1200;
+    if (saved) return parseFloat(saved) || 1550;
   } catch (_) {}
-  return 1200;
+  return 1550;
 }
 
 export function aARS(monto: number, plat: string): number {

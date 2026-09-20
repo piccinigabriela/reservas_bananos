@@ -7,6 +7,7 @@ import {
   calcFinancials, 
   formatMoney, 
   aARS,
+  getTipoCambioVal,
   nightsCount 
 } from '../../services/cabinConfig';
 import { Download, FileText, TrendingUp, ArrowLeft } from 'lucide-react';
@@ -234,6 +235,11 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
               <option value={currentYear + 1}>{currentYear + 1}</option>
             </select>
           </div>
+
+          <div className="bg-[#FAF4EB] border border-[#E5D7C5] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-[#7A6752]">Cambio:</span>
+            <span className="text-xs font-bold text-[#D2502A]">1 USD = ${getTipoCambioVal().toLocaleString('es-AR')} ARS</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -264,6 +270,9 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
           <span className="font-bold text-lg sm:text-2xl text-[#FBF6EE]">
             {formatMoney(totalBruto)}
           </span>
+          <span className="text-[11px] text-[#A69177] block mt-0.5 font-mono">
+            ≈ USD {Math.round(totalBruto / getTipoCambioVal()).toLocaleString('es-AR')}
+          </span>
         </div>
 
         <div>
@@ -290,6 +299,9 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
           </span>
           <span className="font-bold text-xl sm:text-3xl text-[#6EE7B7]">
             {formatMoney(resultadoNeto)}
+          </span>
+          <span className="text-[11px] text-[#A7F3D0] block mt-0.5 font-mono">
+            ≈ USD {Math.round(resultadoNeto / getTipoCambioVal()).toLocaleString('es-AR')}
           </span>
         </div>
 

@@ -129,7 +129,7 @@ export const GastosView: React.FC<GastosViewProps> = ({ gastos, onAddGasto, onDe
             <input
               type="number"
               min="0"
-              step="100"
+              step="any"
               value={monto}
               onChange={e => setMonto(e.target.value)}
               placeholder="Ej: 15000"
