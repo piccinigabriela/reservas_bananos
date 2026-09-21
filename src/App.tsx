@@ -334,7 +334,7 @@ export default function App() {
       />
 
       {/* Contenedor Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-6">
+      <main className={`flex-1 w-full mx-auto p-3 sm:p-6 space-y-6 ${(isReception || currentTab === 'calendario') ? 'max-w-full' : 'max-w-7xl'}`}>
         {isLoading ? (
           <div className="p-12 text-center space-y-3">
             <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />

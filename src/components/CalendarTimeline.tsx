@@ -15,8 +15,10 @@ import {
   formatDateEs,
   nightsCount
 } from '../services/cabinConfig';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Lock, User, AlertCircle, Home, BarChart3, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Lock, User, AlertCircle, Home, BarChart3, ArrowRight, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { calcFinancials, formatMoney } from '../services/cabinConfig';
+
+export type ZoomDensity = 'compact' | 'normal' | 'spacious';
 
 interface CalendarTimelineProps {
   reservas: Reserva[];
@@ -41,6 +43,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
 }) => {
   const today = new Date();
   const [viewType, setViewType] = useState<'mes' | 'semana'>('mes');
+  const [zoomDensity, setZoomDensity] = useState<ZoomDensity>('normal');
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
 
@@ -224,30 +227,80 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
       <div className={`border rounded-xl p-3 sm:p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 transition-colors ${
         isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-white border-[#E2E8F0]'
       }`}>
-        {/* Selector Mes / Semana */}
-        <div className={`flex items-center gap-1.5 p-1 rounded-lg border ${
-          isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-[#F1F5F9] border-[#CBD5E1]'
-        }`}>
-          <button
-            onClick={() => setViewType('mes')}
-            className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition ${
-              viewType === 'mes'
-                ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
-                : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
-            }`}
-          >
-            Vista Mes
-          </button>
-          <button
-            onClick={() => setViewType('semana')}
-            className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition ${
-              viewType === 'semana'
-                ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
-                : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
-            }`}
-          >
-            Vista Semana (7 días amplios)
-          </button>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Selector Mes / Semana */}
+          <div className={`flex items-center gap-1.5 p-1 rounded-lg border ${
+            isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-[#F1F5F9] border-[#CBD5E1]'
+          }`}>
+            <button
+              onClick={() => setViewType('mes')}
+              className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition ${
+                viewType === 'mes'
+                  ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
+                  : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
+              }`}
+            >
+              Vista Mes
+            </button>
+            <button
+              onClick={() => setViewType('semana')}
+              className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition ${
+                viewType === 'semana'
+                  ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
+                  : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
+              }`}
+            >
+              Vista Semana (7 días amplios)
+            </button>
+          </div>
+
+          {/* Control de Zoom / Densidad para Tablet y Desktop */}
+          {viewType === 'mes' && (
+            <div className={`flex items-center gap-1 p-1 rounded-lg border ${
+              isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-[#F1F5F9] border-[#CBD5E1]'
+            }`} title="Ajuste de Zoom para Tablet">
+              <span className={`text-[11px] font-semibold px-1.5 hidden sm:inline ${
+                isDarkMode ? 'text-[#94A3B8]' : 'text-[#64748B]'
+              }`}>
+                Zoom:
+              </span>
+              <button
+                onClick={() => setZoomDensity('compact')}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1 ${
+                  zoomDensity === 'compact'
+                    ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
+                    : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
+                title="Zoom Compacto (entra el mes entero en pantalla de Tablet sin scroll)"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+                <span>Mes Completo</span>
+              </button>
+              <button
+                onClick={() => setZoomDensity('normal')}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition ${
+                  zoomDensity === 'normal'
+                    ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
+                    : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
+                title="Zoom Normal (balance de lectura)"
+              >
+                <span>Normal</span>
+              </button>
+              <button
+                onClick={() => setZoomDensity('spacious')}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1 ${
+                  zoomDensity === 'spacious'
+                    ? isDarkMode ? 'bg-[#2563EB] text-white shadow-xs' : 'bg-[#1E293B] text-white shadow-xs'
+                    : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
+                title="Zoom Amplio (nombres grandes y columnas anchas)"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+                <span>Amplio</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Controles de fecha con botones táctiles grandes */}
@@ -332,32 +385,48 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
           <table className="w-full border-collapse select-none">
             <thead>
               <tr className={isDarkMode ? 'bg-[#0E1013] text-[#94A3B8]' : 'bg-[#1E293B] text-[#F1F5F9]'}>
-                <th className={`sticky left-0 z-20 px-2 py-3 text-center font-bold text-xs uppercase tracking-wider w-14 sm:w-20 border-r shadow-[2px_0_5px_rgba(0,0,0,0.15)] ${
+                <th className={`sticky left-0 z-20 px-2 py-3 text-center font-bold text-xs uppercase tracking-wider border-r shadow-[2px_0_5px_rgba(0,0,0,0.15)] ${
+                  zoomDensity === 'compact' ? 'w-12 sm:w-16 min-w-[48px]' : 'w-14 sm:w-20 min-w-[56px]'
+                } ${
                   isDarkMode ? 'bg-[#0E1013] border-[#2D3540]' : 'bg-[#1E293B] border-[#334155]'
                 }`}>
                   Cab
                 </th>
-                {days.map(d => (
-                  <th
-                    key={d.iso}
-                    className={`px-1 py-2 text-center text-xs font-semibold border-r min-w-[36px] sm:min-w-[44px] ${
-                      isDarkMode ? 'border-[#242A33]' : 'border-[#334155]'
-                    } ${viewType === 'semana' ? 'w-[13.5%] min-w-[100px]' : ''} ${
-                      d.isToday 
-                        ? 'bg-[#2563EB] text-white font-bold' 
-                        : d.isWeekend 
-                          ? isDarkMode ? 'bg-[#161B22]' : 'bg-[#293548]' 
-                          : ''
-                    }`}
-                  >
-                    <span className="block text-[10px] opacity-75 font-normal">
-                      {dowNames[d.dow]}
-                    </span>
-                    <span className="text-xs sm:text-sm font-bold">
-                      {d.dayNum}
-                    </span>
-                  </th>
-                ))}
+                {days.map(d => {
+                  const colWidthClass = viewType === 'semana' 
+                    ? 'w-[13.5%] min-w-[100px]' 
+                    : zoomDensity === 'compact'
+                      ? 'min-w-[28px] sm:min-w-[34px] w-[3.1%]'
+                      : zoomDensity === 'spacious'
+                        ? 'min-w-[52px] sm:min-w-[64px]'
+                        : 'min-w-[36px] sm:min-w-[44px]';
+
+                  return (
+                    <th
+                      key={d.iso}
+                      className={`px-0.5 sm:px-1 py-1.5 sm:py-2 text-center text-xs font-semibold border-r ${colWidthClass} ${
+                        isDarkMode ? 'border-[#242A33]' : 'border-[#334155]'
+                      } ${
+                        d.isToday 
+                          ? 'bg-[#2563EB] text-white font-bold' 
+                          : d.isWeekend 
+                            ? isDarkMode ? 'bg-[#161B22]' : 'bg-[#293548]' 
+                            : ''
+                      }`}
+                    >
+                      <span className={`block font-normal opacity-75 ${
+                        zoomDensity === 'compact' ? 'text-[8px] sm:text-[9px]' : 'text-[10px]'
+                      }`}>
+                        {dowNames[d.dow]}
+                      </span>
+                      <span className={`font-bold ${
+                        zoomDensity === 'compact' ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'
+                      }`}>
+                        {d.dayNum}
+                      </span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className={`divide-y ${isDarkMode ? 'divide-[#242A33]' : 'divide-[#E2E8F0]'}`}>
@@ -365,6 +434,10 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                 const isUnassigned = esSinAsignar(cabinCode);
                 const cabinName = DN[cabinCode] || cabinCode;
                 const cabinColor = DC[cabinCode] || '#666';
+
+                const cellHeight = zoomDensity === 'compact' ? 'h-10' : zoomDensity === 'spacious' ? 'h-14' : 'h-12';
+                const barHeight = zoomDensity === 'compact' ? 'h-7' : zoomDensity === 'spacious' ? 'h-11' : 'h-9';
+                const fontSize = zoomDensity === 'compact' ? 'text-[9.5px]' : zoomDensity === 'spacious' ? 'text-[12px]' : 'text-[11px]';
 
                 return (
                   <tr 
@@ -376,16 +449,18 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                     {/* Columna Cabaña Sticky Compacta */}
                     <td 
                       title={DN[cabinCode] || cabinCode}
-                      className={`sticky left-0 z-10 px-1.5 sm:px-2.5 py-2.5 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${
+                      className={`sticky left-0 z-10 px-1 sm:px-2 py-2 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${
                         isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-white border-[#E2E8F0]'
                       }`}
                     >
-                      <div className="flex items-center justify-center sm:justify-start gap-1.5">
+                      <div className="flex items-center justify-center sm:justify-start gap-1 sm:gap-1.5">
                         <span
                           className="w-2.5 h-2.5 rounded-xs shrink-0"
                           style={{ backgroundColor: cabinColor }}
                         />
-                        <span className={`font-bold text-xs sm:text-sm tracking-wide ${
+                        <span className={`font-bold tracking-wide ${
+                          zoomDensity === 'compact' ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'
+                        } ${
                           isDarkMode ? 'text-[#F1F5F9]' : 'text-[#0F172A]'
                         } ${isDyslexiaMode ? 'font-bold' : ''}`}>
                           {SHORT_DN[cabinCode] || cabinCode}
@@ -416,15 +491,15 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         let bgIn = PLATAFORMA_COLORES[res.plataforma] || '#4B5563';
                         if (isIcalIn) bgIn = '#475569';
 
-                        const guestOut = checkoutRes.huesped.split(' ')[0] || 'Out';
-                        const guestIn = res.huesped.split(' ')[0] || 'In';
+                        const guestOut = checkoutRes.huesped ? checkoutRes.huesped.split(' ')[0] : 'Out';
+                        const guestIn = res.huesped ? res.huesped.split(' ')[0] : 'In';
 
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} ${cellHeight} text-center align-middle ${dayBg}`}
                           >
-                            <div className="h-9 w-full flex items-stretch">
+                            <div className={`${barHeight} w-full flex items-stretch`}>
                               {/* Mitad Izquierda: TERMINA BARRA DE SALIDA (OUT MAÑANA) */}
                               <div
                                 onClick={(e) => {
@@ -432,15 +507,17 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                   if (isIcalOut && onConvertIcalBlock) onConvertIcalBlock(checkoutRes);
                                   else onSelectReserva(checkoutRes);
                                 }}
-                                className="w-1/2 h-full flex items-center justify-end pr-1 text-white cursor-pointer hover:brightness-125 transition rounded-r-md border-y border-l border-white/20 shadow-xs"
+                                className="w-1/2 h-full flex items-center justify-end pr-0.5 sm:pr-1 text-white cursor-pointer hover:brightness-125 transition rounded-r-md border-y border-l border-white/20 shadow-xs"
                                 style={{ backgroundColor: bgOut }}
                                 title={`Check-out: ${checkoutRes.huesped} (${checkoutRes.plataforma})`}
                               >
-                                <span className="text-[8px] font-black uppercase tracking-wider opacity-90 leading-none">◀ OUT</span>
+                                <span className="text-[8px] sm:text-[9px] font-black truncate text-right leading-none max-w-full px-0.5" title={checkoutRes.huesped}>
+                                  {isIcalOut ? 'OUT' : guestOut}
+                                </span>
                               </div>
 
                               {/* Espacio sutil de separación visual entre checkout y checkin */}
-                              <div className="w-1 shrink-0" />
+                              <div className="w-0.5 shrink-0" />
 
                               {/* Mitad Derecha: INICIA BARRA DE ENTRADA (IN TARDE) */}
                               <div
@@ -449,11 +526,13 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                   if (isIcalIn && onConvertIcalBlock) onConvertIcalBlock(res);
                                   else onSelectReserva(res);
                                 }}
-                                className="w-1/2 h-full flex items-center justify-start pl-1 text-white cursor-pointer hover:brightness-125 transition rounded-l-md border-y border-r border-white/20 shadow-xs"
+                                className="w-1/2 h-full flex items-center justify-start pl-0.5 sm:pl-1 text-white cursor-pointer hover:brightness-125 transition rounded-l-md border-y border-r border-white/20 shadow-xs"
                                 style={{ backgroundColor: bgIn }}
                                 title={`Check-in: ${res.huesped} (${res.plataforma})`}
                               >
-                                <span className="text-[8px] font-black uppercase tracking-wider opacity-90 leading-none">IN ▶</span>
+                                <span className="text-[8px] sm:text-[9px] font-black truncate text-left leading-none max-w-full px-0.5" title={res.huesped}>
+                                  {isIcalIn ? 'IN' : guestIn}
+                                </span>
                               </div>
                             </div>
                           </td>
@@ -465,17 +544,17 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         const isIcal = !!res.icalUid;
                         let bgStyle = PLATAFORMA_COLORES[res.plataforma] || '#4B5563';
                         if (isIcal) bgStyle = '#475569';
-                        const guestFirstName = res.huesped.split(' ')[0] || 'Reserva';
+                        const guestFirstName = res.huesped || 'Reserva';
                         const nights = nightsCount(res.checkin, res.checkout);
 
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} ${cellHeight} text-center align-middle ${dayBg}`}
                           >
-                            <div className="h-9 w-full flex items-stretch">
+                            <div className={`${barHeight} w-full flex items-stretch`}>
                               {/* Mitad izquierda libre antes del check-in */}
-                              <div className="w-[30%] h-full flex items-center justify-center text-[8px] font-semibold opacity-30">
+                              <div className="w-[18%] h-full flex items-center justify-center text-[8px] font-semibold opacity-30">
                                 ·
                               </div>
                               {/* Barra continua que arranca aquí (extremo izquierdo redondeado) */}
@@ -484,17 +563,14 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                   if (isIcal && onConvertIcalBlock) onConvertIcalBlock(res);
                                   else onSelectReserva(res);
                                 }}
-                                className="w-[70%] h-full flex items-center gap-1 pl-1.5 pr-0.5 text-white cursor-pointer hover:brightness-110 transition rounded-l-lg border-y border-l border-white/25 shadow-xs"
+                                className="w-[82%] h-full flex items-center gap-1 pl-1 sm:pl-1.5 pr-0.5 text-white cursor-pointer hover:brightness-110 transition rounded-l-lg border-y border-l border-white/25 shadow-xs overflow-hidden"
                                 style={{ backgroundColor: bgStyle }}
-                                title={`Llegada: ${res.huesped} (${nights} noches)`}
+                                title={`Llegada: ${res.huesped} (${nights} noches - ${res.plataforma})`}
                               >
-                                <span className="text-[7.5px] font-black opacity-90 tracking-tighter shrink-0 bg-black/25 px-1 py-0.5 rounded-xs">
-                                  IN
-                                </span>
                                 {isIcal ? (
                                   <Lock className="w-2.5 h-2.5 shrink-0" />
                                 ) : (
-                                  <span className="text-[10.5px] font-extrabold truncate leading-none text-left drop-shadow-xs">
+                                  <span className={`${fontSize} font-black truncate leading-none text-left drop-shadow-xs tracking-tight`}>
                                     {guestFirstName}
                                   </span>
                                 )}
@@ -513,25 +589,25 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} ${cellHeight} text-center align-middle ${dayBg}`}
                           >
-                            <div className="h-9 w-full flex items-stretch">
+                            <div className={`${barHeight} w-full flex items-stretch`}>
                               {/* Barra que termina aquí en la mañana (extremo derecho redondeado) */}
                               <div
                                 onClick={() => {
                                   if (isIcalOut && onConvertIcalBlock) onConvertIcalBlock(checkoutRes);
                                   else onSelectReserva(checkoutRes);
                                 }}
-                                className="w-[70%] h-full flex items-center justify-end pr-1.5 text-white cursor-pointer hover:brightness-110 transition rounded-r-lg border-y border-r border-white/25 shadow-xs"
+                                className="w-[72%] h-full flex items-center justify-end pr-1 sm:pr-1.5 text-white cursor-pointer hover:brightness-110 transition rounded-r-lg border-y border-r border-white/25 shadow-xs overflow-hidden"
                                 style={{ backgroundColor: bgOut }}
                                 title={`Salida mañana: ${checkoutRes.huesped}`}
                               >
-                                <span className="text-[7.5px] font-black opacity-90 tracking-tighter shrink-0 bg-black/25 px-1 py-0.5 rounded-xs">
+                                <span className="text-[7.5px] sm:text-[8px] font-black opacity-90 tracking-tighter shrink-0 bg-black/25 px-0.5 sm:px-1 py-0.5 rounded-xs">
                                   OUT ◀
                                 </span>
                               </div>
                               {/* Mitad derecha libre después del check-out */}
-                              <div className="w-[30%] h-full flex items-center justify-center text-[8px] font-semibold opacity-30">
+                              <div className="w-[28%] h-full flex items-center justify-center text-[8px] font-semibold opacity-30">
                                 ·
                               </div>
                             </div>
@@ -542,11 +618,11 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       // CASO 4: ESTADÍA EN CURSO (DÍA COMPLETO OCUPADO - CUERPO DE LA BARRA CONTINUA)
                       if (res) {
                         const isIcal = !!res.icalUid;
-                        const guestFirstName = res.huesped.split(' ')[0] || 'Reserva';
+                        const guestFirstName = res.huesped || 'Reserva';
                         let bgStyle = PLATAFORMA_COLORES[res.plataforma] || '#4B5563';
                         if (isIcal) bgStyle = '#475569';
 
-                        // Calcular si es el 2do día para mostrar detalles o continuar la cinta limpia
+                        // Calcular posición dentro de la estadía
                         const checkinDate = new Date(res.checkin);
                         const currDate = new Date(d.iso);
                         const diffDays = Math.round((currDate.getTime() - checkinDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -558,14 +634,14 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                               if (isIcal && onConvertIcalBlock) onConvertIcalBlock(res);
                               else onSelectReserva(res);
                             }}
-                            className={`p-0 border-r ${borderCell} h-12 text-center align-middle cursor-pointer ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} ${cellHeight} text-center align-middle cursor-pointer ${dayBg}`}
                           >
                             <div
-                              className={`h-9 w-full flex items-center justify-center text-white text-[11px] font-bold border-y border-white/20 transition hover:brightness-110 shadow-xs ${
+                              className={`${barHeight} w-full flex items-center justify-center text-white ${fontSize} font-bold border-y border-white/20 transition hover:brightness-110 shadow-xs overflow-hidden ${
                                 isIcal ? 'border-b-2 border-dashed border-white/40' : ''
                               }`}
                               style={{ backgroundColor: bgStyle }}
-                              title={`${res.huesped} (${formatDateEs(res.checkin)} a ${formatDateEs(res.checkout)})`}
+                              title={`${res.huesped} (${formatDateEs(res.checkin)} a ${formatDateEs(res.checkout)} - ${res.plataforma})`}
                             >
                               {isIcal ? (
                                 <div className="flex items-center gap-0.5 opacity-80">
@@ -573,13 +649,13 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                   <span className="text-[9px] hidden sm:inline">iCal</span>
                                 </div>
                               ) : (
-                                // Si es semana o si es el 2do día, muestra canal o info adicional; en los demás días la barra corre limpia
-                                <span className="truncate leading-tight px-1 drop-shadow-xs">
-                                  {diffDays === 1 
-                                    ? <span className="text-[9.5px] font-semibold opacity-95">({res.plataforma})</span>
-                                    : viewType === 'semana' 
-                                      ? <span className="text-[9.5px] opacity-75">· · ·</span>
-                                      : <span className="text-white/40 text-[9px] select-none">—</span>
+                                // Mostrar el nombre del huésped en los días intermedios o continuidad limpia
+                                <span className="truncate leading-tight px-0.5 sm:px-1 drop-shadow-xs font-semibold">
+                                  {viewType === 'semana' 
+                                    ? guestFirstName
+                                    : zoomDensity === 'compact'
+                                      ? (diffDays % 3 === 1 ? guestFirstName : <span className="text-white/40 text-[8px] select-none">—</span>)
+                                      : (diffDays % 2 === 1 ? guestFirstName : <span className="text-white/40 text-[9px] select-none">—</span>)
                                   }
                                 </span>
                               )}
@@ -592,7 +668,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       return (
                         <td
                           key={d.iso}
-                          className={`p-0.5 border-r ${borderCell} h-12 text-center align-middle ${dayBg}`}
+                          className={`p-0.5 border-r ${borderCell} ${cellHeight} text-center align-middle ${dayBg}`}
                         >
                           <div className={`h-full w-full rounded-xs flex items-center justify-center text-[10px] transition ${
                             isDarkMode ? 'hover:bg-[#1E242D] text-[#475569]' : 'hover:bg-slate-100 text-slate-300'

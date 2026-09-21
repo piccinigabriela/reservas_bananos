@@ -11,7 +11,7 @@ import {
   nightsCount,
   getFechaCorteCfg
 } from '../../services/cabinConfig';
-import { Download, FileText, TrendingUp, ArrowLeft, Clock } from 'lucide-react';
+import { Download, FileText, TrendingUp, ArrowLeft, Clock, AlertTriangle } from 'lucide-react';
 
 interface RendimientoViewProps {
   reservas: Reserva[];
@@ -60,6 +60,7 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
   const saldoPendiente = Math.max(0, totalLiquido - totalCobrado);
   const resultadoNeto = totalLiquido - totalGastos;
   const ticketPromedio = filteredReservas.length ? totalBruto / filteredReservas.length : 0;
+  const sinPrecioCount = filteredReservas.filter(r => !r.precio || r.precio === 0).length;
 
   // Por cabaña
   const statsPorCabana = CABANAS.map(code => {
@@ -277,6 +278,23 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
         </div>
       </div>
 
+      {/* Alerta si hay reservas sin precio configurado */}
+      {sinPrecioCount > 0 && filteredReservas.length > 0 && (
+        <div className="bg-[#FFFBEB] border border-[#F59E0B]/50 rounded-xl p-4 flex items-start gap-3 text-[#92400E] shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs sm:text-sm">
+            <span className="font-bold text-[#92400E] block">
+              {sinPrecioCount === filteredReservas.length
+                ? `Hay ${filteredReservas.length} reservas registradas (${totalNoches} noches) pero figuran con tarifa $0`
+                : `Hay ${sinPrecioCount} de ${filteredReservas.length} reservas registradas con tarifa $0`}
+            </span>
+            <span className="text-[#B45309] block mt-1 leading-relaxed">
+              Las reservas están en el calendario y ocupan noches reales, pero como fueron importadas desde Google Calendar sin un valor monetario, los ingresos dan $0. Al ingresar a cada reserva (en el Calendario o Tabla) y ponerle su precio real, el sistema calculará los ingresos automáticamente.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Tarjetas de Resumen Numérico Grande */}
       <div className="bg-[#2A2118] text-[#F3E9D6] rounded-2xl p-5 sm:p-6 shadow-md grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div>
@@ -388,7 +406,17 @@ export const RendimientoView: React.FC<RendimientoViewProps> = ({ reservas, gast
                   </td>
                   <td className="p-3 text-center font-medium">{c.count}</td>
                   <td className="p-3 text-center font-semibold">{c.noches}</td>
-                  <td className="p-3">{formatMoney(c.subtotal)}</td>
+                  <td className="p-3">
+                    {c.subtotal > 0 ? (
+                      formatMoney(c.subtotal)
+                    ) : c.count > 0 ? (
+                      <span className="text-[#A16207] font-medium flex items-center gap-1">
+                        $ 0 <span className="text-[10px] bg-[#FEF3C7] text-[#92400E] px-1 py-0.2 rounded font-semibold">Sin tarifa</span>
+                      </span>
+                    ) : (
+                      formatMoney(0)
+                    )}
+                  </td>
                   <td className="p-3 text-[#B33928]">{formatMoney(c.comision)}</td>
                   <td className="p-3 font-bold text-[#2E7D32]">{formatMoney(c.liquido)}</td>
                   <td className="p-3">{formatMoney(c.ticket)}</td>

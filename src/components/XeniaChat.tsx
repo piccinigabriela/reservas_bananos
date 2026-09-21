@@ -727,6 +727,10 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
 
           const aproxUsd = tc > 0 ? ` (≈ USD ${Math.round(resultadoNeto / tc).toLocaleString('es-AR')})` : '';
 
+          const notaTarifa = (totalBruto === 0 && mesReservas.length > 0)
+            ? `\n\n💡 Nota: Las ${mesReservas.length} reservas registradas para este mes figuran actualmente con tarifa $0 (se importaron del calendario sin precio). Apenas les cargues la tarifa real, vas a ver el líquido real reflejado acá.`
+            : '';
+
           botResponse = `📊 Rendimiento de ${mesCapitalizado} ${targetYear}:\n\n` +
             `• Ingresos Brutos: ${formatMoney(totalBruto)}\n` +
             `• Comisiones (Airbnb/Booking): -${formatMoney(totalCom)}\n` +
@@ -734,7 +738,7 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
             (totalGasto > 0 ? `• Gastos Operativos: -${formatMoney(totalGasto)}\n` : '') +
             `• Resultado Neto: ${formatMoney(resultadoNeto)}${aproxUsd}\n` +
             `• Noches vendidas: ${totalNoches} noches en ${mesReservas.length} reservas\n\n` +
-            `Desglose por cabaña:\n${lineasDesglose}`;
+            `Desglose por cabaña:\n${lineasDesglose}${notaTarifa}`;
         }
       }
       // 10. Consulta por cabañas (individual o general)
