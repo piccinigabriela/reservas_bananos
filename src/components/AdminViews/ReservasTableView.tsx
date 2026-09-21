@@ -354,7 +354,12 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
                           {DN[r.depto] || r.depto}
                         </span>
                       </td>
-                      <td className="p-2.5 font-bold text-[#2A2118]">{r.huesped}</td>
+                      <td className="p-2.5 font-bold text-[#2A2118]">
+                        <div>{r.huesped}</div>
+                        <div className="text-[10px] text-[#8C765C] font-normal mt-0.5">
+                          {r.pax || 2} pax {r.plus ? `(+ ${formatMoney(r.plus)} extra)` : ''}
+                        </div>
+                      </td>
                       <td className="p-2.5">{formatDateEs(r.checkin)}</td>
                       <td className="p-2.5">{formatDateEs(r.checkout)}</td>
                       <td className="p-2.5 text-center font-bold">{fin.n}</td>

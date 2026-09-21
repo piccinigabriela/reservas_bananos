@@ -494,10 +494,15 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         const guestOut = checkoutRes.huesped ? checkoutRes.huesped.split(' ')[0] : 'Out';
                         const guestIn = res.huesped ? res.huesped.split(' ')[0] : 'In';
 
+                        const highlightClass = isDarkMode 
+                          ? 'ring-2 ring-amber-500/70 ring-inset z-10 relative bg-amber-950/10' 
+                          : 'ring-2 ring-amber-500 ring-inset z-10 relative bg-amber-50/40';
+
                         return (
                           <td
                             key={d.iso}
-                            className={`p-0 border-r ${borderCell} ${cellHeight} text-center align-middle ${dayBg}`}
+                            className={`p-0 border-r ${borderCell} ${cellHeight} text-center align-middle ${highlightClass}`}
+                            title={`Fecha compartida (Recambio/Turnover) - Salida: ${checkoutRes.huesped} / Entrada: ${res.huesped}`}
                           >
                             <div className={`${barHeight} w-full flex items-stretch`}>
                               {/* Mitad Izquierda: TERMINA BARRA DE SALIDA (OUT MAÑANA) */}

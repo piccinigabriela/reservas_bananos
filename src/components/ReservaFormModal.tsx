@@ -33,8 +33,6 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
   existingReservas,
   isDyslexiaMode,
 }) => {
-  if (!isOpen) return null;
-
   const [depto, setDepto] = useState<CabinCode>(initialData?.depto || 'C2');
   const [huesped, setHuesped] = useState<string>(initialData?.huesped || '');
   const [tel, setTel] = useState<string>(initialData?.tel || '');
@@ -58,6 +56,32 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
   const [late, setLate] = useState<boolean>(initialData?.late || false);
 
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setDepto(initialData?.depto || 'C2');
+      setHuesped(initialData?.huesped || '');
+      setTel(initialData?.tel || '');
+      setNac(initialData?.nac || '');
+      setCheckin(initialData?.checkin || '');
+      setCheckout(initialData?.checkout || '');
+      setPrecio(initialData?.precio !== undefined && initialData?.precio !== null ? initialData.precio : '');
+      setPax(initialData?.pax || 2);
+      setPlus(initialData?.plus !== undefined && initialData?.plus !== null ? initialData.plus : 0);
+      setPlataforma(initialData?.plataforma || 'Directo');
+      setComisionAirbnb(initialData?.comision != null ? Number(initialData.comision) : 15);
+      setEstado(initialData?.estado || 'Confirmada');
+      setDestino(initialData?.destino || '');
+      setNotas(initialData?.notas || '');
+      setSena(initialData?.sena !== undefined && initialData?.sena !== null ? initialData.sena : 0);
+      setSaldo(initialData?.saldo !== undefined && initialData?.saldo !== null ? initialData.saldo : 0);
+      setEarly(initialData?.early || false);
+      setLate(initialData?.late || false);
+      setErrorMessage('');
+    }
+  }, [isOpen, initialData]);
+
+  if (!isOpen) return null;
 
   // Resumen financiero en tiempo real
   const fin = calcFinancials({
@@ -352,7 +376,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
               <span>3. Precio y Pagos</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
                   Precio por Noche *
@@ -366,6 +390,21 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                   placeholder="Ej: 35 o 60000"
                   className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm sm:text-base font-bold text-[#2A2118] outline-none"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
+                  Tarifa Pasajero Extra (Plus)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={plus}
+                  onChange={e => setPlus(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm sm:text-base font-semibold text-[#2A2118] outline-none"
                 />
               </div>
 

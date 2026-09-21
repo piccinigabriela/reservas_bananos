@@ -201,6 +201,37 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
                 </div>
               </div>
 
+              {/* Detalle de Hospedaje y Pasajeros */}
+              <div className="bg-white border border-[#E8DCCF] rounded-xl p-4 shadow-xs">
+                <div className="text-xs uppercase tracking-wider font-bold text-[#8C765C] mb-2.5 flex items-center gap-1.5 border-b border-[#F0E6DA] pb-1.5">
+                  <User className="w-4 h-4 text-[#D2502A]" />
+                  <span>Detalle de Hospedaje y Pasajeros</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs sm:text-sm">
+                  <div>
+                    <span className="text-[#8C765C] font-semibold block text-[11px]">Pasajeros totales (Pax):</span>
+                    <span className="font-bold text-[#2A2118] text-sm sm:text-base">{reserva.pax || 2} personas</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8C765C] font-semibold block text-[11px]">Precio Base por Noche:</span>
+                    <span className="font-bold text-[#2A2118] text-sm sm:text-base">{formatMoney(reserva.precio)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#8C765C] font-semibold block text-[11px]">Pasajeros Excedentes:</span>
+                    <span className="font-semibold text-[#2A2118]">
+                      {Math.max(0, (reserva.pax || 2) - 2)} {Math.max(0, (reserva.pax || 2) - 2) === 1 ? 'persona extra' : 'personas extras'} (base 2 pax)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#8C765C] font-semibold block text-[11px]">Tarifa Pasajero Extra:</span>
+                    <span className="font-bold text-[#2A2118] text-sm sm:text-base">
+                      {reserva.plus ? `${formatMoney(reserva.plus)} por noche` : '$ 0'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Bloque Financiero: Ultra Claro (Precio, Comisión, Neto, Saldo) */}
               <div className="bg-[#2A2118] text-[#F3E9D6] rounded-xl p-4 shadow-md space-y-3">
                 <div className="text-xs uppercase tracking-wider font-bold text-[#D4B594] border-b border-[#47382A] pb-2 flex items-center justify-between">
