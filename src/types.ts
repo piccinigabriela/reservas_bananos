@@ -23,6 +23,7 @@ export interface Reserva {
   checkin: string; // YYYY-MM-DD
   checkout: string; // YYYY-MM-DD
   precio: number; // Por noche
+  moneda?: 'ARS' | 'USD';
   pax?: number;
   plus?: number; // Plus por pasajero adicional
   plataforma: Plataforma | string;

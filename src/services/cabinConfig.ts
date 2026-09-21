@@ -147,10 +147,9 @@ export function getFechaCorteCfg(): string {
   return '2026-09-01'; // Por defecto 1 de septiembre de 2026
 }
 
-export function aARS(monto: number, plat: string): number {
-  const mp = getMonedaPlatCfg();
-  const moneda = mp[plat] || 'ARS';
-  return moneda === 'USD' ? (monto || 0) * getTipoCambioVal() : (monto || 0);
+export function aARS(monto: number, plat: string, moneda?: string): number {
+  const m = moneda || (getMonedaPlatCfg()[plat] || 'ARS');
+  return m === 'USD' ? (monto || 0) * getTipoCambioVal() : (monto || 0);
 }
 
 export function formatMoney(amount: number | null | undefined, currency: string = 'ARS'): string {
@@ -204,8 +203,8 @@ export function getTemporada(fecha: string): 'Alta' | 'Baja' {
 
 export function calcFinancials(r: Partial<Reserva>): CalcResult {
   const n = nightsCount(r.checkin || '', r.checkout || '');
-  const precioARS = aARS(r.precio || 0, r.plataforma || 'Directo');
-  const plusARS = aARS(r.plus || 0, r.plataforma || 'Directo');
+  const precioARS = aARS(r.precio || 0, r.plataforma || 'Directo', r.moneda);
+  const plusARS = aARS(r.plus || 0, r.plataforma || 'Directo', r.moneda);
   const extraPax = Math.max(0, (r.pax || 2) - 2);
   const plusTotal = extraPax * plusARS * n;
   const sub = n * precioARS;

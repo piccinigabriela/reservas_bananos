@@ -10,7 +10,8 @@ import {
   getTemporada,
   esSinAsignar,
   tipoDeSinAsignar,
-  TIPOS
+  TIPOS,
+  getMonedaPlatCfg
 } from '../../services/cabinConfig';
 import { 
   Search, 
@@ -357,7 +358,7 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
                       <td className="p-2.5 font-bold text-[#2A2118]">
                         <div>{r.huesped}</div>
                         <div className="text-[10px] text-[#8C765C] font-normal mt-0.5">
-                          {r.pax || 2} pax {r.plus ? `(+ ${formatMoney(r.plus)} extra)` : ''}
+                          {r.pax || 2} pax {r.plus ? `(+ ${formatMoney(r.plus, r.moneda || (getMonedaPlatCfg()[r.plataforma] || 'ARS'))} extra)` : ''}
                         </div>
                       </td>
                       <td className="p-2.5">{formatDateEs(r.checkin)}</td>

@@ -40,6 +40,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
   const [checkin, setCheckin] = useState<string>(initialData?.checkin || '');
   const [checkout, setCheckout] = useState<string>(initialData?.checkout || '');
   const [precio, setPrecio] = useState<number | string>(initialData?.precio || '');
+  const [moneda, setMoneda] = useState<'ARS' | 'USD'>(initialData?.moneda || (initialData?.plataforma === 'Airbnb' ? 'USD' : 'ARS'));
   const [pax, setPax] = useState<number>(initialData?.pax || 2);
   const [plus, setPlus] = useState<number | string>(initialData?.plus || 0);
   const [plataforma, setPlataforma] = useState<string>(initialData?.plataforma || 'Directo');
@@ -66,6 +67,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       setCheckin(initialData?.checkin || '');
       setCheckout(initialData?.checkout || '');
       setPrecio(initialData?.precio !== undefined && initialData?.precio !== null ? initialData.precio : '');
+      setMoneda(initialData?.moneda || (initialData?.plataforma === 'Airbnb' ? 'USD' : 'ARS'));
       setPax(initialData?.pax || 2);
       setPlus(initialData?.plus !== undefined && initialData?.plus !== null ? initialData.plus : 0);
       setPlataforma(initialData?.plataforma || 'Directo');
@@ -91,6 +93,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
     pax: Number(pax) || 2,
     plus: Number(plus) || 0,
     plataforma,
+    moneda,
     comision: plataforma === 'Airbnb' ? comisionAirbnb : undefined,
     estado,
   });
@@ -155,6 +158,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       checkin,
       checkout,
       precio: Number(precio) || 0,
+      moneda,
       pax: Number(pax) || 2,
       plus: Number(plus) || 0,
       plataforma,
@@ -376,7 +380,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
               <span>3. Precio y Pagos</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
                   Precio por Noche *
@@ -395,7 +399,21 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
-                  Tarifa Pasajero Extra (Plus)
+                  Moneda
+                </label>
+                <select
+                  value={moneda}
+                  onChange={e => setMoneda(e.target.value as 'ARS' | 'USD')}
+                  className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm font-semibold text-[#2A2118] outline-none"
+                >
+                  <option value="ARS">ARS ($)</option>
+                  <option value="USD">USD (US$)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
+                  Pasajero Extra (Plus)
                 </label>
                 <input
                   type="number"
@@ -414,7 +432,15 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                 </label>
                 <select
                   value={plataforma}
-                  onChange={e => setPlataforma(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setPlataforma(val);
+                    if (val === 'Airbnb') {
+                      setMoneda('USD');
+                    } else {
+                      setMoneda('ARS');
+                    }
+                  }}
                   className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm font-semibold text-[#2A2118] outline-none"
                 >
                   <option value="Directo">Directo (WhatsApp / Teléfono)</option>
@@ -427,6 +453,19 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                 </select>
               </div>
             </div>
+
+            {/* Alerta de seguridad si es USD y el precio es inusualmente alto */}
+            {moneda === 'USD' && Number(precio) >= 500 && (
+              <div className="bg-[#FFF9E6] border-2 border-[#FFE082] text-[#7F5F00] p-3 rounded-lg text-xs font-semibold space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span>⚠️ ¿Moneda Correcta?</span>
+                </div>
+                <p>
+                  Estás cargando una tarifa de <strong>USD {Number(precio).toLocaleString('es-AR')}</strong> por noche. 
+                  Si este valor está expresado en <strong>Pesos Argentinos ($)</strong>, por favor cambiá la Moneda arriba a <strong>ARS ($)</strong> para evitar facturaciones gigantescas.
+                </p>
+              </div>
+            )}
 
             {/* Comisión específica de Airbnb */}
             {plataforma === 'Airbnb' && (

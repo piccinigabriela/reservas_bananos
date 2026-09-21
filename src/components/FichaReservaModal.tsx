@@ -10,7 +10,8 @@ import {
   nightsCount,
   esSinAsignar,
   tipoDeSinAsignar,
-  TIPOS
+  TIPOS,
+  getMonedaPlatCfg
 } from '../services/cabinConfig';
 import { 
   X, 
@@ -215,7 +216,9 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
                   </div>
                   <div>
                     <span className="text-[#8C765C] font-semibold block text-[11px]">Precio Base por Noche:</span>
-                    <span className="font-bold text-[#2A2118] text-sm sm:text-base">{formatMoney(reserva.precio)}</span>
+                    <span className="font-bold text-[#2A2118] text-sm sm:text-base">
+                      {formatMoney(reserva.precio, reserva.moneda || (getMonedaPlatCfg()[reserva.plataforma] || 'ARS'))}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[#8C765C] font-semibold block text-[11px]">Pasajeros Excedentes:</span>
@@ -226,7 +229,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
                   <div>
                     <span className="text-[#8C765C] font-semibold block text-[11px]">Tarifa Pasajero Extra:</span>
                     <span className="font-bold text-[#2A2118] text-sm sm:text-base">
-                      {reserva.plus ? `${formatMoney(reserva.plus)} por noche` : '$ 0'}
+                      {reserva.plus ? `${formatMoney(reserva.plus, reserva.moneda || (getMonedaPlatCfg()[reserva.plataforma] || 'ARS'))} por noche` : '$ 0'}
                     </span>
                   </div>
                 </div>
