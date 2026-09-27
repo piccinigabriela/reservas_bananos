@@ -634,9 +634,80 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
       else if (qLower.includes('compartiment') || qLower.includes('casilla') || (qLower.includes('dividid') && (qLower.includes('dia') || qLower.includes('calendario')))) {
         botResponse = 'Las casillas compartimentadas del calendario dividen el día en dos:\n• Lado izquierdo OUT: el huésped que hace check-out por la mañana.\n• Lado derecho IN: el nuevo huésped que hace check-in por la tarde.\nPodés tocar cualquiera de los dos lados para abrir la ficha de esa reserva en particular.';
       }
-      // 6. Modos de usuario
-      else if (qLower.includes('usuario') || qLower.includes('modo') || qLower.includes('recep') || qLower.includes('dia a dia') || qLower.includes('propietario')) {
-        botResponse = 'Los Bananos tiene 2 modos de uso:\n\n1. Modo Día a Día: Solo tenés el calendario limpio y el botón de carga. Es ideal para trabajar sin distracciones financieras ni pantallas complejas. ¡A mí podés preguntarme lo que quieras por voz desde acá!\n\n2. Modo Propietario: Acceso completo con PIN 1234 para ver finanzas, gastos, Google Calendar y configurar iCal.';
+      // 6. Modos de usuario, PINs y accesos
+      else if (
+        qLower.includes('pin') || 
+        qLower.includes('pins') || 
+        qLower.includes('clave') || 
+        qLower.includes('claves') || 
+        qLower.includes('contraseña') || 
+        qLower.includes('usuario') || 
+        qLower.includes('roles') || 
+        qLower.includes('modo') || 
+        qLower.includes('recep') || 
+        qLower.includes('dia a dia') || 
+        qLower.includes('propietario')
+      ) {
+        botResponse = '🔐 Accesos y PINs del Sistema Los Bananos:\n\n' +
+          '1. 👑 Propietario / Admin (PIN: 1234):\n' +
+          'Acceso total a finanzas, balances, gastos, rendimiento, exportación de calendarios y configuración.\n\n' +
+          '2. 🌿 Recepción / Día a Día (PIN: 0000):\n' +
+          'Acceso operativo y ágil al calendario de reservas y recambios diarios sin números financieros.\n\n' +
+          '3. 🧑‍🌾 Voluntarios Worldpackers (PIN: 1111 y 2222):\n' +
+          'Acceso directo a su portal con lista de tareas asignadas (limpieza, parque, mantenimiento), check-ins y calendario general.\n\n' +
+          '💡 Podés personalizar los PINs y nombres en la pestaña "⚙️ Config & PINs".';
+      }
+      // 6.b. Portal de Voluntarios y Worldpackers
+      else if (
+        qLower.includes('voluntario') || 
+        qLower.includes('voluntarios') || 
+        qLower.includes('worldpacker') || 
+        qLower.includes('worldpackers') || 
+        qLower.includes('tarea') || 
+        qLower.includes('tareas')
+      ) {
+        botResponse = '🧑‍🌾 Portal de Voluntarios Worldpackers:\n\n' +
+          '• ¿Qué ven los voluntarios?: Tienen un portal limpio donde ven sus tareas del día (Limpieza de Cabaña, Parque/Selva, Mantenimiento, Check-ins y Francos).\n' +
+          '• Interacción: Pueden marcar sus tareas como completadas con un toque y cambiar el estado de las cabañas de 🔴 Por Limpiar a 🟢 Limpia y Lista.\n' +
+          '• Calendario: Tienen acceso al calendario completo del complejo para saber quién entra y sale, sin ver tarifas ni dinero.\n\n' +
+          '💡 Para previsualizar su vista, hacé clic en el botón "🧑‍🌾 Portal Voluntario" en la barra superior.';
+      }
+      // 6.c. Semáforo de Limpieza
+      else if (
+        qLower.includes('semaforo') || 
+        qLower.includes('semáforo') || 
+        (qLower.includes('estado') && (qLower.includes('limpieza') || qLower.includes('cabaña') || qLower.includes('cabana')))
+      ) {
+        botResponse = '🚦 Semáforo de Limpieza de Cabañas en Tiempo Real:\n\n' +
+          '• 🟢 Limpia y Lista: Cabaña impecable, ventilada y preparada para recibir al nuevo huésped.\n' +
+          '• 🔴 Por Limpiar / Pendiente: El huésped anterior salió y la cabaña requiere recambio de sábanas, toallas e higiene.\n' +
+          '• 🟡 Ocupada: Huésped actualmente alojado en la cabaña.\n\n' +
+          'Podés alternar la vista del calendario tocando el botón "🚦 Semáforo Limpieza" arriba a la derecha.';
+      }
+      // 6.d. Explicación general del funcionamiento del sistema
+      else if (
+        qLower.includes('como funciona') || 
+        qLower.includes('cómo funciona') || 
+        qLower.includes('como se usa') || 
+        qLower.includes('cómo se usa') || 
+        qLower.includes('explicar') || 
+        qLower.includes('explicame') || 
+        qLower.includes('para que sirve') || 
+        qLower.includes('para qué sirve') || 
+        qLower.includes('que podes hacer') || 
+        qLower.includes('qué podés hacer')
+      ) {
+        botResponse = '🍌 ¡Te explico cómo funciona el sistema de Cabañas Los Bananos!\n\n' +
+          '1. 📅 Calendario Matriz Diario:\n' +
+          'Ves las 7 cabañas día a día. Las casillas compartimentadas muestran salidas (OUT) a la mañana y entradas (IN) a la tarde para evitar cualquier confusión.\n\n' +
+          '2. 📱 Simulador & Envíos de WhatsApp:\n' +
+          'Genera en 1 clic los mensajes de bienvenida, ruta, Wi-Fi, control de confort post-check-in y pedidos de reseñas con datos autocompletados del huésped.\n\n' +
+          '3. 🧑‍🌾 Gestión de Voluntarios & Limpieza:\n' +
+          'Asignación de tareas diarias (limpieza, parque, mantenimiento) y semáforo en vivo de cabañas listas o pendientes.\n\n' +
+          '4. 💰 Finanzas y Rendimiento (Modo Propietario - PIN 1234):\n' +
+          'Cálculo automático de ingresos brutos, comisiones de Airbnb/Booking, gastos operativos y líquido neto mes a mes.\n\n' +
+          '5. 🎙️ Asistencia por Voz con Xenia:\n' +
+          '¡Podés hablarme con el micrófono o tipear para saber quién llega hoy, qué cabañas están libres o cuánto generaste!';
       }
       // 7. Sincronización iCal y bloqueo de Airbnb
       else if (
