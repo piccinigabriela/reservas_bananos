@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   Calendar,
   Globe,
-  Bot
+  Bot,
+  MessageSquare
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -380,8 +381,8 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
-              <Bell className="w-3.5 h-3.5" />
-              <span>Avisos de Check-in</span>
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Mensajería & WhatsApp</span>
             </button>
 
             <button

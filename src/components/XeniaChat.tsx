@@ -505,8 +505,36 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
     setTimeout(() => {
       let botResponse = '';
 
-      // 1. Preguntas de ayuda / cómo hacer una reserva o usar el sistema
+      // 0. PLANTILLAS DE WHATSAPP Y BLINDAJE ANTI-QUEJAS (¡MÁXIMA PRIORIDAD - NO CHOCA CON PLANES NI PRECIOS!)
       if (
+        qLower.includes('plantilla') || 
+        qLower.includes('plantillas') || 
+        (qLower.includes('whatsapp') && (qLower.includes('mensaje') || qLower.includes('mensajes') || qLower.includes('texto') || qLower.includes('sirven') || qLower.includes('usar') || qLower.includes('como'))) ||
+        qLower.includes('blindaje') || 
+        qLower.includes('anti-queja') || 
+        qLower.includes('anti queja') ||
+        qLower.includes('anti-quejas') ||
+        qLower.includes('anti quejas') ||
+        qLower.includes('para que sirven las plantillas') ||
+        qLower.includes('para qué sirven las plantillas')
+      ) {
+        botResponse = '📱 Las 6 Plantillas Inteligentes de WhatsApp de Los Bananos:\n\n' +
+          '1. tpl-1: Confirmación y Bienvenida Anticipada (Día 1)\n' +
+          'Se envía al momento de reservar o días antes. Da una bienvenida cálida en plural de cortesía y entrega el link a la Guía Digital del Huésped para planificar paseos y traslados.\n\n' +
+          '2. tpl-5: Coordinación en Ruta / Día de Viaje\n' +
+          'Para la mañana del viaje. Coordina horarios, demoras en vuelos/rutas y solicita la ubicación en tiempo real cuando estén a 30-40 min para esperarlos con el aire fresco y todo impecable.\n\n' +
+          '3. tpl-2: Instrucciones de Auto Check-in y Clave Wi-Fi\n' +
+          'Horas antes o al llegar. Entrega la ubicación GPS en Google Maps, indicaciones de acceso/llaves y la contraseña del Wi-Fi.\n\n' +
+          '4. tpl-6: Control de Confort (2hs Post-Ingreso) — 🛡️ Blindaje Anti-Quejas\n' +
+          '¡Estrategia clave de blindaje! Se envía 2 horas después de ingresar para chequear que todo esté impecable (aire acondicionado, agua caliente, toallas, cama). Permite resolver cualquier mínimo detalle inmediatamente en privado antes de que se transforme en una mala reseña pública en Airbnb o Booking.\n\n' +
+          '5. tpl-3: Recordatorio de Check-out Amable\n' +
+          'La noche anterior (20:00 hs). Recuerda con amabilidad el horario de salida (10:00 hs) para organizar el recambio de mucamas y ofrece guardar equipaje si su vuelo es más tarde.\n\n' +
+          '6. tpl-4: Solicitud de Reseña 5 Estrellas y Descuento Directo\n' +
+          '2 horas después del check-out. Agradece la visita, invita a dejar 5 estrellas en Google/Airbnb y regala un 10% de descuento directo (código BANANOS10) para su próximo viaje.\n\n' +
+          '💡 Podés usarlas desde la pestaña "Mensajería & WhatsApp" con filtros rápidos o tocando el botón verde "Chatear" en la ficha de cualquier reserva.';
+      }
+      // 1. Preguntas de ayuda / cómo hacer una reserva o usar el sistema
+      else if (
         qLower.includes('como hago una reserva') || 
         qLower.includes('como creo una reserva') || 
         qLower.includes('como cargar') || 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Reserva } from '../types';
 import { 
   DN, 
@@ -15,6 +15,11 @@ import {
   SEMAFORO_CONFIG,
   getCabinCleaningStatuses
 } from '../services/cabinConfig';
+import {
+  WHATSAPP_TEMPLATES,
+  cleanPhoneNumber,
+  buildWhatsAppUrl
+} from '../services/whatsappTemplates';
 import { 
   X, 
   Calendar, 
@@ -28,7 +33,9 @@ import {
   CheckCircle2, 
   AlertCircle,
   Tag,
-  Send
+  Send,
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 import { getTelegramConfig, sendTelegramMessage, formatTelegramCheckin } from '../services/telegramService';
 
@@ -69,12 +76,29 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
 
   const cabinColor = DC[reserva.depto] || '#2A2118';
 
+  // Estado de plantilla seleccionada para WhatsApp
+  const todayIso = new Date().toISOString().split('T')[0];
+  const defaultTemplateId = reserva.checkin === todayIso 
+    ? 'tpl-2' 
+    : reserva.checkout === todayIso 
+    ? 'tpl-3' 
+    : reserva.checkin <= todayIso && reserva.checkout > todayIso
+    ? 'tpl-6'
+    : 'tpl-1';
+
+  const [selectedTplId, setSelectedTplId] = useState<string>(defaultTemplateId);
+  const [showTplPicker, setShowTplPicker] = useState<boolean>(false);
+
   // Abrir WhatsApp al huésped
-  const handleOpenWhatsApp = () => {
+  const handleOpenWhatsApp = (templateIdOverride?: string) => {
     if (!reserva.tel) return;
-    const cleanTel = reserva.tel.replace(/\D/g, '');
-    const msg = `Hola ${reserva.huesped}! Te escribimos de Cabañas Los Bananos en Puerto Iguazú para confirmar tu estadía del ${formatDateEs(reserva.checkin)} al ${formatDateEs(reserva.checkout)}.`;
-    window.open(`https://wa.me/${cleanTel}?text=${encodeURIComponent(msg)}`, '_blank');
+    const cleanTel = cleanPhoneNumber(reserva.tel);
+    if (!cleanTel) return;
+
+    const tplToUse = WHATSAPP_TEMPLATES.find(t => t.id === (templateIdOverride || selectedTplId)) || WHATSAPP_TEMPLATES[0];
+    const msg = tplToUse.generateText(reserva);
+    const url = buildWhatsAppUrl(cleanTel, msg);
+    window.open(url, '_blank');
   };
 
   const [tgLoading, setTgLoading] = React.useState(false);
@@ -344,9 +368,52 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
                 </div>
 
                 {reserva.tel && (
-                  <div className="flex items-center justify-between border-b border-[#F0E6DA] pb-2">
-                    <span className="text-[#8C765C] font-semibold">Teléfono / WhatsApp:</span>
-                    <span className="font-medium text-[#2A2118]">{reserva.tel}</span>
+                  <div className="border-b border-[#F0E6DA] pb-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#8C765C] font-semibold">Teléfono / WhatsApp:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-[#2A2118] text-sm">{reserva.tel}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenWhatsApp()}
+                          className="px-2.5 py-1 bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-black rounded-lg transition flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer"
+                          title="Abrir chat de WhatsApp directo con el huésped"
+                        >
+                          <MessageSquare className="w-3 h-3 fill-white" />
+                          <span>Chatear</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Selector rápido de plantilla para enviar */}
+                    <div className="bg-[#F0FDF4] border border-emerald-200 rounded-xl p-2 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-emerald-900">
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-emerald-600" />
+                          Plantilla WhatsApp:
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-semibold">
+                          {WHATSAPP_TEMPLATES.find(t => t.id === selectedTplId)?.badge}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {WHATSAPP_TEMPLATES.map(tpl => (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            onClick={() => setSelectedTplId(tpl.id)}
+                            className={`px-1.5 py-1 rounded-md text-[10px] font-bold truncate transition border ${
+                              selectedTplId === tpl.id
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                : 'bg-white text-slate-700 hover:bg-emerald-50 border-emerald-200'
+                            }`}
+                            title={tpl.title}
+                          >
+                            {tpl.badge.split('•')[0].trim()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -388,7 +455,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
             {/* WhatsApp al Huésped */}
             {reserva.tel && !isIcal && (
               <button
-                onClick={handleOpenWhatsApp}
+                onClick={() => handleOpenWhatsApp()}
                 className="flex-1 min-w-[140px] py-2.5 px-4 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm"
               >
                 <MessageSquare className="w-4 h-4" />
