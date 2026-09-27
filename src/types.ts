@@ -65,7 +65,7 @@ export interface UserRoleInfo {
   role: string;
 }
 
-export type UserKey = 'admin' | 'recepcion' | 'gabi' | 'vol' | 'vol1' | 'vol2';
+export type UserKey = 'admin' | 'recepcion' | 'vol' | 'vol1' | 'vol2';
 
 export type AppView = 'calendario' | 'reservas' | 'gastos' | 'rendimiento' | 'avisos' | 'config' | 'xenia';
 

@@ -465,6 +465,11 @@ export default function App() {
         onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
         onSwitchToReception={handleSwitchToReception}
         onOpenLandingPage={() => setIsLandingMode(true)}
+        onSwitchToVolunteer={volId => {
+          setCurrentUser(volId);
+          localStorage.setItem('bn_remembered_user', volId);
+          showToast(`Ingresando a la vista de ${volId === 'vol1' ? 'Voluntario 1' : 'Voluntario 2'} 🧑‍🌾`);
+        }}
       />
 
       {/* Contenedor Principal */}

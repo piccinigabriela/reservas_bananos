@@ -323,7 +323,6 @@ export const PLATAFORMA_COLORES: Record<string, string> = {
 export const DEFAULT_PINS: Record<string, string> = {
   admin: '1234',
   recepcion: '0000',
-  gabi: '2345',
   vol: '0000',
   vol1: '1111',
   vol2: '2222',
@@ -346,7 +345,6 @@ export function saveAppPins(pins: Record<string, string>): void {
 export const USER_META: Record<string, { name: string; role: string }> = {
   admin: { name: 'Propietario', role: 'Modo Completo' },
   recepcion: { name: 'Recepción', role: 'Día a Día (Solo Calendario)' },
-  gabi: { name: 'Gabi', role: 'Administración' },
   vol: { name: 'Recepción', role: 'Día a Día (Solo Calendario)' },
   vol1: { name: 'Voluntario 1', role: 'Mi Agenda Worldpackers' },
   vol2: { name: 'Voluntario 2', role: 'Mi Agenda Worldpackers' },

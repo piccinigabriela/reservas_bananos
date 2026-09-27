@@ -245,11 +245,11 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <span>PINs de Propietario y Recepción (4 dígitos)</span>
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
             <div>
               <span className="font-bold text-xs text-[#2A2118] block">👑 Propietario / Admin</span>
-              <span className="text-[11px] text-[#7A6752] block">Acceso a balances y finanzas</span>
+              <span className="text-[11px] text-[#7A6752] block">Acceso general a finanzas, balances y configuración</span>
             </div>
             <input
               type="text"
@@ -267,7 +267,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
             <div>
               <span className="font-bold text-xs text-[#2A2118] block">🌿 Día a Día / Recepción</span>
-              <span className="text-[11px] text-[#7A6752] block">Calendario diario de cabañas</span>
+              <span className="text-[11px] text-[#7A6752] block">Calendario diario de cabañas y recambios</span>
             </div>
             <input
               type="text"
@@ -278,24 +278,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 setPins(p => ({ ...p, recepcion: val, vol: val }));
               }}
               placeholder="0000"
-              className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
-            />
-          </div>
-
-          <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
-            <div>
-              <span className="font-bold text-xs text-[#2A2118] block">👩‍💼 Gabi (Administración)</span>
-              <span className="text-[11px] text-[#7A6752] block">Gestión completa</span>
-            </div>
-            <input
-              type="text"
-              maxLength={4}
-              value={pins.gabi || ''}
-              onChange={e => {
-                const val = e.target.value.replace(/\D/g, '');
-                setPins(p => ({ ...p, gabi: val }));
-              }}
-              placeholder="2345"
               className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
             />
           </div>

@@ -41,6 +41,7 @@ interface HeaderProps {
   onRequestSwitchToAdmin?: () => void;
   onSwitchToReception?: () => void;
   onOpenLandingPage?: () => void;
+  onSwitchToVolunteer?: (volId: 'vol1' | 'vol2') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -61,6 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRequestSwitchToAdmin,
   onSwitchToReception,
   onOpenLandingPage,
+  onSwitchToVolunteer,
 }) => {
   const userInfo = USER_META[currentUser] || { name: 'Usuario', role: 'General' };
   const isReception = currentUser === 'recepcion' || currentUser === 'vol';
@@ -264,6 +266,40 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-sm">🍍</span>
                 <span>
                   {currentTab === 'xenia' ? '← Calendario' : '🤖 Xenia Multicanal'}
+                </span>
+              </button>
+
+              {/* Botón rápido: Portal Voluntario */}
+              {onSwitchToVolunteer && (
+                <button
+                  onClick={() => onSwitchToVolunteer('vol1')}
+                  title="Ver la vista y tareas de los voluntarios (Worldpackers)"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#162B22] hover:bg-[#1E3B2E] text-emerald-300 border border-emerald-600/50 font-semibold transition active:scale-95"
+                >
+                  <span>🧑‍🌾</span>
+                  <span className="hidden sm:inline">Portal Voluntario</span>
+                </button>
+              )}
+
+              {/* Botón directo: Configuración & PINs */}
+              <button
+                onClick={() => {
+                  if (currentTab === 'config') {
+                    onSelectTab('calendario');
+                  } else {
+                    onSelectTab('config');
+                  }
+                }}
+                title="Configuración de PINs de 4 dígitos, nombres de voluntarios, iCal y respaldo"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition border ${
+                  currentTab === 'config'
+                    ? 'bg-amber-600 text-white border-amber-500 shadow-md'
+                    : 'bg-[#222933] text-amber-300 border-[#2D3540] hover:bg-[#2D3540]'
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">
+                  {currentTab === 'config' ? '← Calendario' : '⚙️ Config & PINs'}
                 </span>
               </button>
 
