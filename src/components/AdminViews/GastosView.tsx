@@ -197,17 +197,17 @@ export const GastosView: React.FC<GastosViewProps> = ({ gastos, onAddGasto, onDe
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm text-left">
-            <thead className="bg-[#2A2118] text-[#F3E9D6] uppercase text-[11px]">
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto scrollbar-thin">
+          <table className="w-full text-xs sm:text-sm text-left border-separate border-spacing-0">
+            <thead className="sticky top-0 z-20 bg-[#2A2118] text-[#F3E9D6] uppercase text-[11px] shadow-xs">
               <tr>
-                <th className="p-3">Fecha</th>
-                <th className="p-3">Cabaña</th>
-                <th className="p-3">Categoría</th>
-                <th className="p-3">Descripción</th>
-                <th className="p-3">Monto</th>
-                <th className="p-3">Comprobante</th>
-                <th className="p-3 text-right">Acción</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 border-b border-[#3D3023]">Fecha</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 border-b border-[#3D3023]">Cabaña</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 border-b border-[#3D3023]">Categoría</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 border-b border-[#3D3023]">Descripción</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 border-b border-[#3D3023]">Monto</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 border-b border-[#3D3023]">Comprobante</th>
+                <th className="sticky top-0 bg-[#2A2118] p-3 text-right border-b border-[#3D3023]">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFE5D8]">

@@ -480,17 +480,17 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
       </div>
 
       {/* Grid del Calendario / Matriz de Cabañas Charcoal con encabezado de fechas fijo (Sticky) */}
-      <div className={`border rounded-xl overflow-hidden shadow-sm transition-colors ${
+      <div className={`border rounded-xl shadow-md transition-colors ${
         isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-white border-[#CBD5E1]'
       }`}>
-        <div className="overflow-x-auto max-h-[75vh] overflow-y-auto scrollbar-thin">
+        <div className="overflow-x-auto max-h-[75vh] overflow-y-auto scrollbar-thin relative rounded-xl">
           <table className="w-full border-separate border-spacing-0 select-none">
-            <thead className="sticky top-0 z-30 shadow-xs">
+            <thead className="sticky top-0 z-30 shadow-md">
               <tr className={isDarkMode ? 'bg-[#0E1013] text-[#94A3B8]' : 'bg-[#1E293B] text-[#F1F5F9]'}>
-                <th className={`sticky left-0 top-0 z-40 px-2 py-2.5 text-center font-bold text-xs uppercase tracking-wider border-b border-r shadow-[2px_0_5px_rgba(0,0,0,0.15)] ${
+                <th className={`sticky left-0 top-0 z-50 px-2 py-2.5 text-center font-bold text-xs uppercase tracking-wider border-b border-r shadow-[3px_3px_8px_rgba(0,0,0,0.3)] ${
                   zoomDensity === 'compact' ? 'w-12 sm:w-16 min-w-[48px]' : 'w-14 sm:w-20 min-w-[56px]'
                 } ${
-                  isDarkMode ? 'bg-[#0E1013] border-[#2D3540]' : 'bg-[#1E293B] border-[#334155]'
+                  isDarkMode ? 'bg-[#0E1013] border-[#2D3540] text-slate-200' : 'bg-[#1E293B] border-[#334155] text-white'
                 }`}>
                   Cab
                 </th>
@@ -506,11 +506,11 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                   return (
                     <th
                       key={d.iso}
-                      className={`sticky top-0 z-30 px-0.5 sm:px-1 py-1.5 sm:py-2 text-center text-xs font-semibold border-b border-r ${colWidthClass} ${
+                      className={`sticky top-0 z-30 px-0.5 sm:px-1 py-1.5 sm:py-2 text-center text-xs font-semibold border-b border-r shadow-[0_2px_4px_rgba(0,0,0,0.15)] ${colWidthClass} ${
                         isDarkMode ? 'border-[#242A33]' : 'border-[#334155]'
                       } ${
                         d.isToday 
-                          ? 'bg-[#2563EB] text-white font-bold' 
+                          ? 'bg-[#2563EB] text-white font-bold ring-1 ring-blue-400/60' 
                           : d.isWeekend 
                             ? isDarkMode ? 'bg-[#161B22]' : 'bg-[#293548]' 
                             : isDarkMode ? 'bg-[#0E1013]' : 'bg-[#1E293B]'
@@ -551,7 +551,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                     {/* Columna Cabaña Sticky Compacta con Semáforo */}
                     <td 
                       title={DN[cabinCode] || cabinCode}
-                      className={`sticky left-0 z-10 px-1 sm:px-2 py-2 border-r border-b shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${
+                      className={`sticky left-0 z-20 px-1 sm:px-2 py-2 border-r border-b shadow-[2px_0_6px_rgba(0,0,0,0.15)] ${
                         isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-white border-[#E2E8F0]'
                       }`}
                     >
@@ -933,7 +933,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                     {/* Columna Sticky del Voluntario */}
                     <td 
                       title={rawName}
-                      className={`sticky left-0 z-10 px-1.5 sm:px-2 py-2 border-r border-b shadow-[2px_0_5px_rgba(0,0,0,0.05)] cursor-pointer group ${
+                      className={`sticky left-0 z-20 px-1.5 sm:px-2 py-2 border-r border-b shadow-[2px_0_6px_rgba(0,0,0,0.15)] cursor-pointer group ${
                         isMyRow
                           ? isDarkMode ? 'bg-[#1C2622] border-emerald-500/50 text-emerald-300' : 'bg-emerald-100 border-emerald-400 text-emerald-900'
                           : isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-[#FAF5EE] border-[#E2E8F0]'

@@ -561,6 +561,7 @@ export default function App() {
                       showToast(`¡Reserva creada por Xenia: ${res.huesped} en ${res.plataforma}! 🎉`);
                     }}
                     onOpenLandingPage={() => setIsLandingMode(true)}
+                    onNavigateTab={setCurrentTab}
                   />
                 )}
               </>

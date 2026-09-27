@@ -298,35 +298,35 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
 
       {/* Tabla Principal */}
       <div className="bg-white border border-[#E5D7C5] rounded-xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-[#2A2118] text-[#F3E9D6] uppercase text-[10px] tracking-wider whitespace-nowrap">
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto scrollbar-thin">
+          <table className="w-full text-xs text-left border-separate border-spacing-0">
+            <thead className="sticky top-0 z-20 bg-[#2A2118] text-[#F3E9D6] uppercase text-[10px] tracking-wider whitespace-nowrap shadow-xs">
               <tr>
-                <th className="p-2.5 text-center">#</th>
-                <th className="p-2.5 cursor-pointer hover:underline" onClick={() => handleSort('depto')}>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 text-center border-b border-[#3D3023]">#</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 cursor-pointer hover:underline border-b border-[#3D3023]" onClick={() => handleSort('depto')}>
                   Cabaña <ArrowUpDown className="w-3 h-3 inline opacity-70" />
                 </th>
-                <th className="p-2.5 cursor-pointer hover:underline" onClick={() => handleSort('huesped')}>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 cursor-pointer hover:underline border-b border-[#3D3023]" onClick={() => handleSort('huesped')}>
                   Huésped <ArrowUpDown className="w-3 h-3 inline opacity-70" />
                 </th>
-                <th className="p-2.5 cursor-pointer hover:underline" onClick={() => handleSort('checkin')}>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 cursor-pointer hover:underline border-b border-[#3D3023]" onClick={() => handleSort('checkin')}>
                   Llegada <ArrowUpDown className="w-3 h-3 inline opacity-70" />
                 </th>
-                <th className="p-2.5">Salida</th>
-                <th className="p-2.5 text-center">N</th>
-                <th className="p-2.5 cursor-pointer hover:underline" onClick={() => handleSort('subtotal')}>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 border-b border-[#3D3023]">Salida</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 text-center border-b border-[#3D3023]">N</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 cursor-pointer hover:underline border-b border-[#3D3023]" onClick={() => handleSort('subtotal')}>
                   Subtotal <ArrowUpDown className="w-3 h-3 inline opacity-70" />
                 </th>
-                <th className="p-2.5 text-[#F9A8A0]">Com.</th>
-                <th className="p-2.5 font-bold text-[#6EE7B7] cursor-pointer hover:underline" onClick={() => handleSort('liquido')}>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 text-[#F9A8A0] border-b border-[#3D3023]">Com.</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 font-bold text-[#6EE7B7] cursor-pointer hover:underline border-b border-[#3D3023]" onClick={() => handleSort('liquido')}>
                   Líquido <ArrowUpDown className="w-3 h-3 inline opacity-70" />
                 </th>
-                <th className="p-2.5">Seña</th>
-                <th className="p-2.5">Saldo</th>
-                <th className="p-2.5 text-center">Temp.</th>
-                <th className="p-2.5">Estado</th>
-                <th className="p-2.5">Canal</th>
-                <th className="p-2.5 text-right">Acciones</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 border-b border-[#3D3023]">Seña</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 border-b border-[#3D3023]">Saldo</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 text-center border-b border-[#3D3023]">Temp.</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 border-b border-[#3D3023]">Estado</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 border-b border-[#3D3023]">Canal</th>
+                <th className="sticky top-0 bg-[#2A2118] p-2.5 text-right border-b border-[#3D3023]">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EFE5D8] whitespace-nowrap">

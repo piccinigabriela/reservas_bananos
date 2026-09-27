@@ -566,7 +566,57 @@ app.post('/api/webhook/meta', async (req, res) => {
       const text = message.text.body;
       const channel = body.object === 'instagram' ? 'instagram' : 'whatsapp';
 
-      console.log(`[Xenia ${channel.toUpperCase()}] Mensaje de ${fromPhone}: "${text}"`);
+      console.log(`[Xenia ${channel.toUpperCase()}] Mensaje entrante de ${fromPhone}: "${text}"`);
+
+      // Procesar con Xenia AI
+      let replyText = '¡Hola! Gracias por comunicarte con Cabañas Los Bananos en Puerto Iguazú. ¿En qué fechas tenías pensado visitarnos y para cuántas personas?';
+      
+      try {
+        if (process.env.GEMINI_API_KEY) {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          const geminiRes = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: [{ role: 'user', parts: [{ text }] }],
+            config: {
+              systemInstruction: `Sos Xenia, la Asistente Virtual Oficial de Cabañas Los Bananos en Puerto Iguazú. El huésped te escribe por ${channel} desde el teléfono ${fromPhone}. Responde de forma cálida, profesional y orientada a confirmar la estadía.`,
+            },
+          });
+          if (geminiRes.text) {
+            replyText = geminiRes.text;
+          }
+        }
+      } catch (aiErr) {
+        console.warn('[Xenia Webhook AI] Fallback a respuesta predeterminada:', aiErr);
+      }
+
+      // Enviar respuesta real saliente si las credenciales de Meta están configuradas
+      const metaToken = process.env.META_ACCESS_TOKEN;
+      const phoneId = process.env.META_PHONE_NUMBER_ID;
+
+      if (metaToken && phoneId && channel === 'whatsapp') {
+        try {
+          const resMeta = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${metaToken}`,
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: fromPhone,
+              type: 'text',
+              text: { preview_url: true, body: replyText },
+            }),
+          });
+          const metaData = await resMeta.json();
+          console.log('[Xenia WhatsApp Outbound] Respuesta enviada:', metaData);
+        } catch (sendErr) {
+          console.error('[Xenia WhatsApp Outbound] Error enviando mensaje a WhatsApp:', sendErr);
+        }
+      } else {
+        console.log(`[Xenia Simulación] Respuesta lista para ${fromPhone}: "${replyText.slice(0, 100)}..." (Para envío real configure META_ACCESS_TOKEN y META_PHONE_NUMBER_ID)`);
+      }
     }
   } catch (err) {
     console.error('Error procesando webhook de Meta:', err);

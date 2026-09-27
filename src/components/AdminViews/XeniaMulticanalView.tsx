@@ -30,6 +30,7 @@ interface XeniaMulticanalViewProps {
   reservas: Reserva[];
   onNewReservaCreated: (reserva: Reserva) => void;
   onOpenLandingPage: () => void;
+  onNavigateTab?: (tab: any) => void;
 }
 
 type ChannelType = 'whatsapp' | 'instagram' | 'web';
@@ -39,6 +40,7 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
   reservas,
   onNewReservaCreated,
   onOpenLandingPage,
+  onNavigateTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('simulador');
   const [selectedChannel, setSelectedChannel] = useState<ChannelType>('whatsapp');
@@ -196,6 +198,10 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
 
   const testScenarios = [
     {
+      title: 'Plantillas & Blindaje Anti-Quejas',
+      text: '¿Para qué sirven las 6 plantillas de WhatsApp y cómo funciona el blindaje anti-quejas?',
+    },
+    {
       title: 'Disponibilidad para 4 pax',
       text: 'Hola! Somos una familia de 4 personas, ¿tienen cabaña libre del 10 al 12 de octubre?',
     },
@@ -240,15 +246,28 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
           </p>
         </div>
 
-        {/* Acceso a la Landing Page Pública */}
-        <button
-          onClick={onOpenLandingPage}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-950/60 transition transform active:scale-95 cursor-pointer shrink-0"
-        >
-          <Globe className="w-4 h-4" />
-          <span>Ver Landing Page Pública</span>
-          <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-        </button>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('avisos')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-700/80 hover:bg-emerald-600 text-white font-bold text-xs sm:text-sm border border-emerald-500/40 shadow-md transition transform active:scale-95 cursor-pointer"
+              title="Ir al módulo con las 6 plantillas oficiales y filtros de reservas"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Ver Mensajería & WhatsApp (6 Plantillas)</span>
+            </button>
+          )}
+
+          {/* Acceso a la Landing Page Pública */}
+          <button
+            onClick={onOpenLandingPage}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-950/60 transition transform active:scale-95 cursor-pointer"
+          >
+            <Globe className="w-4 h-4" />
+            <span>Landing Pública</span>
+            <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+          </button>
+        </div>
       </div>
 
       {/* Selector de Pestañas Secundarias */}
