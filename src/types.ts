@@ -65,9 +65,9 @@ export interface UserRoleInfo {
   role: string;
 }
 
-export type UserKey = 'admin' | 'recepcion' | 'gabi' | 'vol';
+export type UserKey = 'admin' | 'recepcion' | 'gabi' | 'vol' | 'vol1' | 'vol2';
 
-export type AppView = 'calendario' | 'reservas' | 'gastos' | 'rendimiento' | 'avisos' | 'config';
+export type AppView = 'calendario' | 'reservas' | 'gastos' | 'rendimiento' | 'avisos' | 'config' | 'xenia';
 
 export interface TemporadaRango {
   tipo: 'mes' | 'rango';
@@ -76,4 +76,38 @@ export interface TemporadaRango {
   mesDesde?: number;
   diaHasta?: number;
   mesHasta?: number;
+}
+
+export type VolunteerId = 'vol1' | 'vol2';
+
+export type CabinCleaningStatus = 'limpia' | 'pendiente' | 'ocupada';
+
+export interface CabinStatusInfo {
+  depto: CabinCode;
+  status: CabinCleaningStatus; // 'limpia' (Verde), 'pendiente' (Roja), 'ocupada' (Amarilla)
+  updatedAt?: string; // ISO string
+  updatedBy?: string; // Ej: "Voluntario 1", "Recepción"
+  notas?: string;
+}
+
+export type CalendarColorMode = 'plataforma' | 'semaforo_limpieza';
+
+export type VolunteerTaskType = 
+  | 'limpieza' 
+  | 'parque' 
+  | 'mantenimiento' 
+  | 'checkin' 
+  | 'libre' 
+  | 'otro';
+
+export interface VolunteerTask {
+  id: string;
+  voluntarioId: VolunteerId; // 'vol1' | 'vol2'
+  fecha: string; // YYYY-MM-DD
+  titulo: string; // Ej: "Limpieza C5 y C6", "Cortar pasto sector pileta"
+  tipo: VolunteerTaskType;
+  completada?: boolean;
+  horario?: string; // Ej: "09:00 a 13:00"
+  notas?: string;
+  depto?: string; // Opcional vinculación con cabaña
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Reserva, Gasto, CabinCode, UserKey, AppView } from './types';
+import { Reserva, Gasto, CabinCode, UserKey, AppView, VolunteerTask, VolunteerId, CabinCleaningStatus, CabinStatusInfo } from './types';
 import { 
   fetchReservas, 
   saveReservas, 
@@ -7,7 +7,17 @@ import {
   saveGastos, 
   syncIcalFeeds 
 } from './services/api';
-import { CABANAS, DN, DC } from './services/cabinConfig';
+import { 
+  CABANAS, 
+  DN, 
+  DC, 
+  getVolunteerTasks, 
+  saveVolunteerTasks, 
+  getVolunteerNames,
+  getCabinCleaningStatuses,
+  saveCabinCleaningStatuses,
+  updateCabinCleaningStatus
+} from './services/cabinConfig';
 import { Header } from './components/Header';
 import { CalendarTimeline } from './components/CalendarTimeline';
 import { FichaReservaModal } from './components/FichaReservaModal';
@@ -16,13 +26,17 @@ import { AssignCabinModal } from './components/AssignCabinModal';
 import { GoogleCalendarImportModal } from './components/GoogleCalendarImportModal';
 import { ConfirmClearReservasModal } from './components/ConfirmClearReservasModal';
 import { UnlockAdminModal } from './components/UnlockAdminModal';
+import { VolunteerTaskModal } from './components/VolunteerTaskModal';
 import { PinLogin } from './components/PinLogin';
+import { VoluntarioPortalView } from './components/VoluntarioPortalView';
 import { XeniaChat } from './components/XeniaChat';
 import { RendimientoView } from './components/AdminViews/RendimientoView';
 import { GastosView } from './components/AdminViews/GastosView';
 import { ReservasTableView } from './components/AdminViews/ReservasTableView';
 import { AvisosView } from './components/AdminViews/AvisosView';
 import { ConfigView } from './components/AdminViews/ConfigView';
+import { XeniaMulticanalView } from './components/AdminViews/XeniaMulticanalView';
+import { LandingPageView } from './components/LandingPageView';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -51,9 +65,15 @@ export default function App() {
     return localStorage.getItem('bn_dyslexia') === 'true';
   });
 
+  // Vista de Huéspedes (Landing Page pública de reservas)
+  const [isLandingMode, setIsLandingMode] = useState<boolean>(false);
+
   // Datos
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [volunteerTasks, setVolunteerTasks] = useState<VolunteerTask[]>(() => getVolunteerTasks());
+  const [volunteerNames, setVolunteerNames] = useState<Record<VolunteerId, string>>(() => getVolunteerNames());
+  const [cabinStatuses, setCabinStatuses] = useState<Record<CabinCode, CabinStatusInfo>>(() => getCabinCleaningStatuses());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncingIcal, setIsSyncingIcal] = useState<boolean>(false);
 
@@ -65,6 +85,11 @@ export default function App() {
   const [isGoogleCalendarOpen, setIsGoogleCalendarOpen] = useState<boolean>(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState<boolean>(false);
   const [isUnlockAdminOpen, setIsUnlockAdminOpen] = useState<boolean>(false);
+  const [volunteerModalSlot, setVolunteerModalSlot] = useState<{
+    volId: VolunteerId;
+    dateIso: string;
+    task?: VolunteerTask | null;
+  } | null>(null);
 
   // Toast
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -86,6 +111,8 @@ export default function App() {
       ]);
       setReservas(loadedReservas);
       setGastos(loadedGastos);
+      setVolunteerTasks(getVolunteerTasks());
+      setVolunteerNames(getVolunteerNames());
       setIsLoading(false);
 
       // Sincronización en segundo plano de feeds iCal
@@ -161,15 +188,17 @@ export default function App() {
   // Guardar reserva (creación o edición)
   const handleSaveReserva = async (reservaData: Partial<Reserva>) => {
     let updated: Reserva[];
-    if (reservaData.id) {
+    const exists = reservaData.id && reservas.some(r => r.id === reservaData.id);
+    if (exists) {
       // Edición
-      updated = reservas.map(r => (r.id === reservaData.id ? ({ ...r, ...reservaData } as Reserva) : r));
-      showToast('Reserva actualizada con éxito ✓');
+      updated = reservas.map(r => (r.id === reservaData.id ? ({ ...r, ...reservaData, icalUid: undefined } as Reserva) : r));
+      showToast('Reserva guardada con éxito ✓');
     } else {
       // Creación
       const newRes: Reserva = {
         ...reservaData,
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+        id: reservaData.id || ('res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4)),
+        icalUid: undefined,
       } as Reserva;
       updated = [...reservas, newRes];
       showToast('Reserva creada con éxito ✓');
@@ -254,12 +283,71 @@ export default function App() {
     await saveGastos(updated);
   };
 
+  // Guardar o modificar tarea de voluntario
+  const handleSaveVolunteerTask = (task: VolunteerTask) => {
+    let updated: VolunteerTask[];
+    const idx = volunteerTasks.findIndex(t => t.id === task.id || (t.voluntarioId === task.voluntarioId && t.fecha === task.fecha));
+    if (idx >= 0) {
+      updated = [...volunteerTasks];
+      updated[idx] = task;
+    } else {
+      updated = [...volunteerTasks, task];
+    }
+    setVolunteerTasks(updated);
+    saveVolunteerTasks(updated);
+    
+    // Si la tarea se guardó como completada y tiene cabaña vinculada, marcar cabaña limpia automáticamente
+    if (task.completada && task.depto && CABANAS.includes(task.depto as CabinCode)) {
+      const volName = volunteerNames[task.voluntarioId]?.split('(')[0]?.trim() || 'Voluntario';
+      const updatedStatuses = updateCabinCleaningStatus(task.depto as CabinCode, 'limpia', volName);
+      setCabinStatuses({ ...updatedStatuses });
+    }
+
+    const volName = volunteerNames[task.voluntarioId]?.split('(')[0]?.trim() || 'Voluntario';
+    showToast(`Tarea guardada para ${volName} ${task.completada ? '✓ Cabaña Limpia 🟢' : ''}`);
+  };
+
+  // Eliminar tarea de voluntario
+  const handleDeleteVolunteerTask = (taskId: string) => {
+    const updated = volunteerTasks.filter(t => t.id !== taskId);
+    setVolunteerTasks(updated);
+    saveVolunteerTasks(updated);
+    showToast('Tarea de voluntario eliminada');
+  };
+
+  // Alternar completada en tarea de voluntario
+  const handleToggleVolunteerTaskComplete = (taskId: string, completed: boolean) => {
+    const updated = volunteerTasks.map(t => t.id === taskId ? { ...t, completada: completed } : t);
+    setVolunteerTasks(updated);
+    saveVolunteerTasks(updated);
+
+    const targetTask = volunteerTasks.find(t => t.id === taskId);
+    if (targetTask && targetTask.depto && CABANAS.includes(targetTask.depto as CabinCode)) {
+      const nextCabinStatus = completed ? 'limpia' : 'pendiente';
+      const volName = volunteerNames[targetTask.voluntarioId]?.split('(')[0]?.trim() || 'Voluntario';
+      const updatedStatuses = updateCabinCleaningStatus(targetTask.depto as CabinCode, nextCabinStatus, volName);
+      setCabinStatuses({ ...updatedStatuses });
+    }
+
+    showToast(completed ? '¡Tarea realizada ✓ y Cabaña marcada como Limpia 🟢!' : 'Tarea marcada como pendiente');
+  };
+
+  // Actualizar estado de limpieza de una cabaña (Semáforo)
+  const handleUpdateCabinStatus = (depto: CabinCode, status: CabinCleaningStatus, updatedBy?: string) => {
+    const updated = updateCabinCleaningStatus(depto, status, updatedBy || (currentUser === 'vol1' || currentUser === 'vol2' ? volunteerNames[currentUser] : 'Recepción'));
+    setCabinStatuses({ ...updated });
+    showToast(`${DN[depto] || depto}: marcada como ${status === 'limpia' ? 'Limpia 🟢' : status === 'pendiente' ? 'Pendiente Limpieza 🔴' : 'Ocupada 🟡'}`);
+  };
+
   // Descarga de Backup
   const handleDownloadBackup = () => {
     const backupObj = {
       fecha: new Date().toISOString(),
       reservas,
       gastos,
+      volunteerTasks,
+      volunteerNames,
+      cabinStatuses,
       pins: localStorage.getItem('bn_p'),
       wa: localStorage.getItem('bn_wa'),
       ical: localStorage.getItem('bn_ical'),
@@ -287,6 +375,17 @@ export default function App() {
             setGastos(data.gastos);
             await saveGastos(data.gastos);
           }
+          if (data.volunteerTasks && Array.isArray(data.volunteerTasks)) {
+            setVolunteerTasks(data.volunteerTasks);
+            saveVolunteerTasks(data.volunteerTasks);
+          }
+          if (data.volunteerNames) {
+            setVolunteerNames(data.volunteerNames);
+          }
+          if (data.cabinStatuses) {
+            setCabinStatuses(data.cabinStatuses);
+            saveCabinCleaningStatuses(data.cabinStatuses);
+          }
           showToast('Copia de respaldo restaurada con éxito ✓');
         } else {
           showToast('Archivo de respaldo no válido', false);
@@ -304,6 +403,40 @@ export default function App() {
   }
 
   const isDarkMode = theme === 'dark';
+
+  // Si el usuario ingresó como Voluntario (Worldpackers 1 o 2)
+  if (currentUser === 'vol1' || currentUser === 'vol2') {
+    return (
+      <VoluntarioPortalView
+        volunteerId={currentUser}
+        tasks={volunteerTasks}
+        onToggleTaskComplete={handleToggleVolunteerTaskComplete}
+        reservas={reservas}
+        onLogout={() => {
+          localStorage.removeItem('bn_remembered_user');
+          setCurrentUser(null);
+        }}
+        isDarkMode={isDarkMode}
+        onToggleTheme={handleToggleTheme}
+        cabinStatuses={cabinStatuses}
+        onUpdateCabinStatus={handleUpdateCabinStatus}
+      />
+    );
+  }
+
+  // Si el usuario eligió abrir la Landing Page pública de Huéspedes
+  if (isLandingMode) {
+    return (
+      <LandingPageView
+        reservas={reservas}
+        onBackToAdmin={() => setIsLandingMode(false)}
+        onNewReservaCreated={res => {
+          handleSaveReserva(res);
+          showToast(`¡Nueva reserva creada desde la Landing: ${res.huesped}! 🎉`);
+        }}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'theme-dark bg-[#12151A] text-[#F1F5F9]' : 'theme-light bg-[#F3F5F7] text-[#0F172A]'} flex flex-col ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
@@ -331,6 +464,7 @@ export default function App() {
         onOpenGoogleCalendar={() => setIsGoogleCalendarOpen(true)}
         onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
         onSwitchToReception={handleSwitchToReception}
+        onOpenLandingPage={() => setIsLandingMode(true)}
       />
 
       {/* Contenedor Principal */}
@@ -352,9 +486,16 @@ export default function App() {
                 onOpenAssignCabin={res => setAssigningReserva(res)}
                 onConvertIcalBlock={res => handleConvertIcalBlock(res)}
                 onOpenRendimiento={() => setCurrentTab('rendimiento')}
+                volunteerTasks={volunteerTasks}
+                onSelectVolunteerSlot={(volId, dateIso, task) => {
+                  setVolunteerModalSlot({ volId, dateIso, task: task || null });
+                }}
+                volunteerNames={volunteerNames}
                 isDyslexiaMode={isDyslexiaMode}
                 isDarkMode={isDarkMode}
                 isReception={isReception}
+                cabinStatuses={cabinStatuses}
+                onUpdateCabinStatus={handleUpdateCabinStatus}
               />
             )}
 
@@ -408,6 +549,18 @@ export default function App() {
                     onDownloadBackup={handleDownloadBackup}
                     onRestoreBackup={handleRestoreBackup}
                     onClearAllReservas={() => setIsConfirmClearOpen(true)}
+                  />
+                )}
+
+                {/* Vista 7: Xenia Multicanal (WhatsApp, Instagram y Web) */}
+                {currentTab === 'xenia' && (
+                  <XeniaMulticanalView
+                    reservas={reservas}
+                    onNewReservaCreated={res => {
+                      handleSaveReserva(res);
+                      showToast(`¡Reserva creada por Xenia: ${res.huesped} en ${res.plataforma}! 🎉`);
+                    }}
+                    onOpenLandingPage={() => setIsLandingMode(true)}
                   />
                 )}
               </>
@@ -479,6 +632,21 @@ export default function App() {
         onClose={() => setIsUnlockAdminOpen(false)}
         onSuccess={handleUnlockAdminSuccess}
       />
+
+      {/* Modal: Tarea de Voluntario Worldpackers */}
+      {volunteerModalSlot && (
+        <VolunteerTaskModal
+          isOpen={volunteerModalSlot !== null}
+          onClose={() => setVolunteerModalSlot(null)}
+          onSaveTask={handleSaveVolunteerTask}
+          onDeleteTask={handleDeleteVolunteerTask}
+          initialTask={volunteerModalSlot.task}
+          selectedVolunteerId={volunteerModalSlot.volId}
+          selectedDate={volunteerModalSlot.dateIso}
+          isDarkMode={isDarkMode}
+          isDyslexiaMode={isDyslexiaMode}
+        />
+      )}
 
       {/* Asistente Flotante Xenia */}
       <XeniaChat reservas={reservas} gastos={gastos} theme={theme} />

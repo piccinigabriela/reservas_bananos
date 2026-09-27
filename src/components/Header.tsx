@@ -17,7 +17,9 @@ import {
   Moon,
   Upload,
   ShieldCheck,
-  Calendar
+  Calendar,
+  Globe,
+  Bot
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -37,6 +39,7 @@ interface HeaderProps {
   onOpenGoogleCalendar: () => void;
   onRequestSwitchToAdmin?: () => void;
   onSwitchToReception?: () => void;
+  onOpenLandingPage?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,6 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenGoogleCalendar,
   onRequestSwitchToAdmin,
   onSwitchToReception,
+  onOpenLandingPage,
 }) => {
   const userInfo = USER_META[currentUser] || { name: 'Usuario', role: 'General' };
   const isReception = currentUser === 'recepcion' || currentUser === 'vol';
@@ -240,6 +244,40 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </button>
 
+              {/* Botón directo: Agente Xenia (WhatsApp/Instagram/Web) */}
+              <button
+                onClick={() => {
+                  if (currentTab === 'xenia') {
+                    onSelectTab('calendario');
+                  } else {
+                    onSelectTab('xenia');
+                  }
+                }}
+                title="Agente de reservas Xenia para WhatsApp, Instagram y Web"
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition border ${
+                  currentTab === 'xenia'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-md'
+                    : 'bg-[#222933] text-teal-400 border-[#2D3540] hover:bg-[#2D3540]'
+                }`}
+              >
+                <span className="text-sm">🍍</span>
+                <span>
+                  {currentTab === 'xenia' ? '← Calendario' : '🤖 Xenia Multicanal'}
+                </span>
+              </button>
+
+              {/* Botón rápido: Landing Huéspedes */}
+              {onOpenLandingPage && (
+                <button
+                  onClick={onOpenLandingPage}
+                  title="Abrir vista de huéspedes (Landing Page de Cabañas Los Bananos)"
+                  className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#161D27] hover:bg-[#202936] text-emerald-300 border border-emerald-700/40 transition"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Landing Huéspedes</span>
+                </button>
+              )}
+
               {/* Más herramientas */}
               <button
                 onClick={onToggleViewMode}
@@ -344,6 +382,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Bell className="w-3.5 h-3.5" />
               <span>Avisos de Check-in</span>
+            </button>
+
+            <button
+              onClick={() => onSelectTab('xenia')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+                currentTab === 'xenia'
+                  ? 'bg-emerald-600 text-white font-semibold'
+                  : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
+              }`}
+            >
+              <span className="text-sm">🍍</span>
+              <span>Xenia (WhatsApp/IG/Web)</span>
             </button>
 
             <button

@@ -1,45 +1,116 @@
 import { Reserva, Gasto } from '../types';
 import { SB_URL, SB_KEY, SB_HDR, SB_TABLE, SB_TABLE_G, CABANAS, DN } from './cabinConfig';
 
-const RESERVA_TEMPLATE = {
-  id: '',
-  depto: 'C2',
-  huesped: '',
-  tel: '',
-  nac: '',
-  checkin: '',
-  checkout: '',
-  precio: 0,
-  pax: 2,
-  plus: 0,
-  plataforma: 'Directo',
-  destino: '',
-  estado: 'Confirmada',
-  notas: '',
-  early: false,
-  late: false,
-  sena: 0,
-  saldo: 0,
-  creado: '',
-  limpio: false,
-  comision: null,
-};
+// Exact columns present in the Supabase 'reservas_bananos' table
+const DB_COLUMNS = [
+  'id',
+  'depto',
+  'huesped',
+  'tel',
+  'nac',
+  'checkin',
+  'checkout',
+  'precio',
+  'pax',
+  'plus',
+  'plataforma',
+  'destino',
+  'estado',
+  'notas',
+  'early',
+  'late',
+  'sena',
+  'saldo',
+  'creado',
+  'limpio',
+  'comision',
+] as const;
 
-function normalizeReserva(r: Partial<Reserva>): any {
-  const { icalUid, ...rest } = r;
-  return { ...RESERVA_TEMPLATE, ...rest };
+function sanitizeReservaForDb(r: Partial<Reserva>): Record<string, any> {
+  const precio = typeof r.precio === 'number' ? r.precio : (parseFloat(String(r.precio)) || 0);
+  const plus = typeof r.plus === 'number' ? r.plus : (parseFloat(String(r.plus)) || 0);
+  const pax = parseInt(String(r.pax || 2), 10) || 2;
+  const sena = typeof r.sena === 'number' ? r.sena : (parseFloat(String(r.sena)) || 0);
+  const saldo = typeof r.saldo === 'number' ? r.saldo : (parseFloat(String(r.saldo)) || 0);
+  const comision = r.comision !== undefined && r.comision !== null && !isNaN(Number(r.comision)) ? Number(r.comision) : null;
+
+  // Preserve custom currency in notas if it differs from the platform default
+  let notas = (r.notas || '').trim();
+  if (r.moneda === 'USD' && r.plataforma !== 'Airbnb' && !notas.includes('[USD]')) {
+    notas = `${notas} [USD]`.trim();
+  } else if (r.moneda === 'ARS' && r.plataforma === 'Airbnb' && !notas.includes('[ARS]')) {
+    notas = `${notas} [ARS]`.trim();
+  }
+
+  const row: Record<string, any> = {
+    id: String(r.id || (Date.now().toString(36) + Math.random().toString(36).substr(2, 4))),
+    depto: r.depto || 'C2',
+    huesped: (r.huesped || '').trim(),
+    tel: (r.tel || '').trim(),
+    nac: (r.nac || '').trim(),
+    checkin: r.checkin || '',
+    checkout: r.checkout || '',
+    precio: isNaN(precio) ? 0 : precio,
+    pax: pax,
+    plus: isNaN(plus) ? 0 : plus,
+    plataforma: r.plataforma || 'Directo',
+    destino: r.destino || '',
+    estado: r.estado || 'Confirmada',
+    notas: notas,
+    early: Boolean(r.early),
+    late: Boolean(r.late),
+    sena: isNaN(sena) ? 0 : sena,
+    saldo: isNaN(saldo) ? 0 : saldo,
+    creado: r.creado || new Date().toISOString(),
+    limpio: Boolean(r.limpio),
+    comision: comision,
+  };
+
+  // Ensure ONLY valid Supabase columns are present in the object sent to Postgres
+  const cleanRow: Record<string, any> = {};
+  for (const col of DB_COLUMNS) {
+    cleanRow[col] = row[col];
+  }
+  return cleanRow;
 }
 
-function rebuildIcalUid(r: any): Reserva {
-  if (r.id && typeof r.id === 'string' && r.id.startsWith('ical-') && r.notas && r.notas.includes('Bloqueo iCal')) {
-    return { ...r, icalUid: r.id };
+function parseReservaFromDb(r: any): Reserva {
+  const notas = r.notas || '';
+  let moneda: 'ARS' | 'USD' = r.plataforma === 'Airbnb' ? 'USD' : 'ARS';
+  if (notas.includes('[USD]')) {
+    moneda = 'USD';
+  } else if (notas.includes('[ARS]')) {
+    moneda = 'ARS';
   }
-  return r;
+
+  const precio = typeof r.precio === 'number' ? r.precio : (parseFloat(String(r.precio)) || 0);
+  const plus = typeof r.plus === 'number' ? r.plus : (parseFloat(String(r.plus)) || 0);
+  const pax = parseInt(String(r.pax || 2), 10) || 2;
+  const sena = typeof r.sena === 'number' ? r.sena : (parseFloat(String(r.sena)) || 0);
+  const saldo = typeof r.saldo === 'number' ? r.saldo : (parseFloat(String(r.saldo)) || 0);
+
+  const isLockPlaceholder = 
+    typeof r.id === 'string' && 
+    r.id.startsWith('ical-') && 
+    notas.includes('Bloqueo iCal') && 
+    precio === 0 && 
+    (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
+
+  return {
+    ...r,
+    precio: isNaN(precio) ? 0 : precio,
+    plus: isNaN(plus) ? 0 : plus,
+    pax: pax,
+    sena: isNaN(sena) ? 0 : sena,
+    saldo: isNaN(saldo) ? 0 : saldo,
+    moneda: r.moneda || moneda,
+    icalUid: isLockPlaceholder ? r.id : undefined,
+  };
 }
 
 export async function fetchReservas(): Promise<Reserva[]> {
   const localRaw = localStorage.getItem('bn_r');
-  const local: Reserva[] = localRaw ? JSON.parse(localRaw).map(rebuildIcalUid) : [];
+  const local: Reserva[] = localRaw ? JSON.parse(localRaw).map(parseReservaFromDb) : [];
 
   try {
     const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?select=*&order=creado.asc`, {
@@ -51,7 +122,7 @@ export async function fetchReservas(): Promise<Reserva[]> {
         console.warn('Supabase devolvió 0 reservas pero hay locales. Conservando local.');
         return local;
       }
-      const parsed = remoto.map(rebuildIcalUid);
+      const parsed = remoto.map(parseReservaFromDb);
       localStorage.setItem('bn_r', JSON.stringify(parsed));
       return parsed;
     }
@@ -62,8 +133,11 @@ export async function fetchReservas(): Promise<Reserva[]> {
 }
 
 export async function saveReservas(data: Reserva[]): Promise<boolean> {
-  const normalized = data.map(normalizeReserva);
-  localStorage.setItem('bn_r', JSON.stringify(normalized));
+  // Always save complete state to localStorage for offline reliability and immediate UI responsiveness
+  localStorage.setItem('bn_r', JSON.stringify(data));
+
+  // Sanitize exact payload for Supabase database table
+  const dbPayload = data.map(sanitizeReservaForDb);
 
   try {
     const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}`, {
@@ -72,12 +146,12 @@ export async function saveReservas(data: Reserva[]): Promise<boolean> {
         ...SB_HDR,
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify(normalized),
+      body: JSON.stringify(dbPayload),
     });
 
     if (res.ok) {
       // Eliminar registros que ya no existen
-      const ids = normalized.map((r: any) => r.id);
+      const ids = dbPayload.map((r: any) => r.id);
       if (ids.length > 0) {
         await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=not.in.(${ids.map((id: string) => `"${id}"`).join(',')})`, {
           method: 'DELETE',
@@ -85,9 +159,12 @@ export async function saveReservas(data: Reserva[]): Promise<boolean> {
         });
       }
       return true;
+    } else {
+      const errText = await res.text();
+      console.error('Error guardando en Supabase reservas (status ' + res.status + '):', errText);
     }
   } catch (err) {
-    console.error('Error guardando en Supabase:', err);
+    console.error('Error de red guardando en Supabase:', err);
   }
   return false;
 }
@@ -219,14 +296,19 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
       if (!text.includes('BEGIN:VCALENDAR')) continue;
 
       const events = parseIcal(text, t.src);
-      // Remove old ical blocks for this cabin
-      nuevasReservas = nuevasReservas.filter(
-        r => !(r.depto === t.code && (r.icalUid || (r.id && r.id.startsWith('ical-' + t.code + '-'))))
-      );
+      // Remove ONLY unpriced lock placeholders for this cabin (never touch reservations with guest names, prices, or user edits)
+      nuevasReservas = nuevasReservas.filter(r => {
+        if (r.depto !== t.code) return true;
+        const isSyntheticLock = 
+          (r.icalUid || (r.id && r.id.startsWith('ical-' + t.code + '-'))) &&
+          (!r.precio || r.precio === 0) &&
+          (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
+        return !isSyntheticLock;
+      });
 
       events.forEach(ev => {
         if (ev.co < today) return;
-        const exists = nuevasReservas.find(
+        const conflict = nuevasReservas.find(
           r =>
             r.depto === t.code &&
             r.estado !== 'Cancelada' &&
@@ -235,7 +317,8 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
             !(ev.co <= r.checkin || ev.ci >= r.checkout)
         );
 
-        if (!exists || (exists && exists.icalUid)) {
+        // Only create an automated lock if there is no confirmed/priced reservation occupying those dates
+        if (!conflict) {
           nuevasReservas.push({
             id: 'ical-' + t.code + '-' + ev.uid.replace(/[^a-z0-9]/gi, '-').substr(0, 20),
             icalUid: ev.uid,
@@ -252,7 +335,7 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
             checkin: ev.ci,
             checkout: ev.co,
             precio: 0,
-            pax: 0,
+            pax: 2,
             plus: 0,
             plataforma: t.src === 'booking' ? 'Booking' : 'Airbnb',
             destino: '',

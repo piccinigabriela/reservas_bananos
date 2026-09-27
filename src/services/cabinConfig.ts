@@ -1,6 +1,247 @@
-import { CabinCode, CabinType, Plataforma, Reserva, CalcResult, TemporadaRango } from '../types';
+import { 
+  CabinCode, 
+  CabinType, 
+  Plataforma, 
+  Reserva, 
+  CalcResult, 
+  TemporadaRango, 
+  VolunteerId, 
+  VolunteerTaskType, 
+  VolunteerTask,
+  CabinCleaningStatus,
+  CabinStatusInfo,
+  CalendarColorMode
+} from '../types';
 
 export const CABANAS: CabinCode[] = ['C2', 'C3', 'C5', 'C6', 'C7', 'C8', 'C9'];
+
+export const VOLUNTEER_IDS: VolunteerId[] = ['vol1', 'vol2'];
+
+// Configuración del Semáforo de Limpieza y Ocupación
+export const SEMAFORO_CONFIG: Record<CabinCleaningStatus, {
+  label: string;
+  shortLabel: string;
+  color: string;
+  hex: string;
+  bgDark: string;
+  borderDark: string;
+  textDark: string;
+  bgLight: string;
+  borderLight: string;
+  textLight: string;
+  icon: string;
+  desc: string;
+}> = {
+  ocupada: {
+    label: 'Cabaña Ocupada',
+    shortLabel: 'Ocupada',
+    color: 'amarillo',
+    hex: '#F59E0B', // Amarillo ámbar de alto contraste
+    bgDark: 'bg-amber-500/20',
+    borderDark: 'border-amber-500/50',
+    textDark: 'text-amber-300',
+    bgLight: 'bg-amber-100',
+    borderLight: 'border-amber-400',
+    textLight: 'text-amber-900',
+    icon: '🟡',
+    desc: 'Huéspedes alojados en la cabaña',
+  },
+  limpia: {
+    label: 'Cabaña Limpia (Lista)',
+    shortLabel: 'Limpia',
+    color: 'verde',
+    hex: '#10B981', // Verde esmeralda
+    bgDark: 'bg-emerald-500/20',
+    borderDark: 'border-emerald-500/50',
+    textDark: 'text-emerald-300',
+    bgLight: 'bg-emerald-100',
+    borderLight: 'border-emerald-400',
+    textLight: 'text-emerald-900',
+    icon: '🟢',
+    desc: 'Limpia, armada y lista para recibir huéspedes',
+  },
+  pendiente: {
+    label: 'Desocupada / Pendiente de Limpieza',
+    shortLabel: 'Pendiente',
+    color: 'roja',
+    hex: '#EF4444', // Rojo
+    bgDark: 'bg-rose-500/20',
+    borderDark: 'border-rose-500/50',
+    textDark: 'text-rose-300',
+    bgLight: 'bg-rose-100',
+    borderLight: 'border-rose-400',
+    textLight: 'text-rose-900',
+    icon: '🔴',
+    desc: 'Desocupada. Requiere limpieza y preparación',
+  },
+};
+
+export function getInitialCabinCleaningStatuses(): Record<CabinCode, CabinStatusInfo> {
+  return {
+    C2: { depto: 'C2', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    C3: { depto: 'C3', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    C5: { depto: 'C5', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    C6: { depto: 'C6', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    C7: { depto: 'C7', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    C8: { depto: 'C8', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    C9: { depto: 'C9', status: 'limpia', updatedAt: new Date().toISOString(), updatedBy: 'Sistema' },
+    SA_big: { depto: 'SA_big', status: 'limpia' },
+    SA_tj: { depto: 'SA_tj', status: 'limpia' },
+    SA_te: { depto: 'SA_te', status: 'limpia' },
+  };
+}
+
+export function getCabinCleaningStatuses(): Record<CabinCode, CabinStatusInfo> {
+  try {
+    const saved = localStorage.getItem('bn_cabin_cleaning_statuses');
+    if (saved) {
+      return { ...getInitialCabinCleaningStatuses(), ...JSON.parse(saved) };
+    }
+  } catch (_) {}
+  return getInitialCabinCleaningStatuses();
+}
+
+export function saveCabinCleaningStatuses(statuses: Record<CabinCode, CabinStatusInfo>): void {
+  try {
+    localStorage.setItem('bn_cabin_cleaning_statuses', JSON.stringify(statuses));
+  } catch (_) {}
+}
+
+export function updateCabinCleaningStatus(
+  depto: CabinCode, 
+  status: CabinCleaningStatus, 
+  updatedBy?: string, 
+  notas?: string
+): Record<CabinCode, CabinStatusInfo> {
+  const current = getCabinCleaningStatuses();
+  current[depto] = {
+    depto,
+    status,
+    updatedAt: new Date().toISOString(),
+    updatedBy: updatedBy || 'Usuario',
+    notas: notas || current[depto]?.notas,
+  };
+  saveCabinCleaningStatuses(current);
+  return current;
+}
+
+export const DEFAULT_VOLUNTEER_NAMES: Record<VolunteerId, string> = {
+  vol1: 'Voluntario 1 (Worldpackers)',
+  vol2: 'Voluntario 2 (Worldpackers)',
+};
+
+export const DEFAULT_VOLUNTEER_SHORT_NAMES: Record<VolunteerId, string> = {
+  vol1: 'Vol. 1',
+  vol2: 'Vol. 2',
+};
+
+export const VOLUNTEER_TASK_META: Record<VolunteerTaskType, { 
+  label: string; 
+  icon: string; 
+  color: string;
+  bgLight: string;
+  textLight: string;
+  borderLight: string;
+  bgDark: string;
+  textDark: string;
+  borderDark: string;
+}> = {
+  limpieza: {
+    label: 'Limpieza / Habitación',
+    icon: '🧹',
+    color: '#10B981',
+    bgLight: '#DCFCE7',
+    textLight: '#166534',
+    borderLight: '#86EFAC',
+    bgDark: '#064E3B',
+    textDark: '#A7F3D0',
+    borderDark: '#059669',
+  },
+  parque: {
+    label: 'Parque / Cortar Pasto / Selva',
+    icon: '🌿',
+    color: '#059669',
+    bgLight: '#ECFDF5',
+    textLight: '#065F46',
+    borderLight: '#6EE7B7',
+    bgDark: '#047857',
+    textDark: '#D1FAE5',
+    borderDark: '#10B981',
+  },
+  mantenimiento: {
+    label: 'Mantenimiento / Reparación',
+    icon: '🔧',
+    color: '#D97706',
+    bgLight: '#FEF3C7',
+    textLight: '#92400E',
+    borderLight: '#FCD34D',
+    bgDark: '#78350F',
+    textDark: '#FDE68A',
+    borderDark: '#B45309',
+  },
+  checkin: {
+    label: 'Preparar Check-in / Huéspedes',
+    icon: '🔑',
+    color: '#2563EB',
+    bgLight: '#DBEAFE',
+    textLight: '#1E40AF',
+    borderLight: '#93C5FD',
+    bgDark: '#1E3A8A',
+    textDark: '#BFDBFE',
+    borderDark: '#3B82F6',
+  },
+  libre: {
+    label: 'Día Libre / Descanso',
+    icon: '🌴',
+    color: '#8B5CF6',
+    bgLight: '#F3E8FF',
+    textLight: '#6B21A8',
+    borderLight: '#D8B4FE',
+    bgDark: '#4C1D95',
+    textDark: '#E9D5FF',
+    borderDark: '#7C3AED',
+  },
+  otro: {
+    label: 'Otra Tarea / General',
+    icon: '📋',
+    color: '#6B7280',
+    bgLight: '#F3F4F6',
+    textLight: '#374151',
+    borderLight: '#D1D5DB',
+    bgDark: '#1F2937',
+    textDark: '#E5E7EB',
+    borderDark: '#4B5563',
+  },
+};
+
+export function getVolunteerNames(): Record<VolunteerId, string> {
+  try {
+    const saved = localStorage.getItem('bn_vol_names');
+    if (saved) return { ...DEFAULT_VOLUNTEER_NAMES, ...JSON.parse(saved) };
+  } catch (_) {}
+  return { ...DEFAULT_VOLUNTEER_NAMES };
+}
+
+export function saveVolunteerNames(names: Record<VolunteerId, string>): void {
+  try {
+    localStorage.setItem('bn_vol_names', JSON.stringify(names));
+  } catch (_) {}
+}
+
+export function getVolunteerTasks(): VolunteerTask[] {
+  try {
+    const saved = localStorage.getItem('bn_vol_tasks');
+    if (saved) return JSON.parse(saved);
+  } catch (_) {}
+  return [];
+}
+
+export function saveVolunteerTasks(tasks: VolunteerTask[]): void {
+  try {
+    localStorage.setItem('bn_vol_tasks', JSON.stringify(tasks));
+  } catch (_) {}
+}
+
 
 export const DC: Record<CabinCode, string> = {
   C2: '#3d7a25', // Verde bosque
@@ -79,18 +320,36 @@ export const PLATAFORMA_COLORES: Record<string, string> = {
   Otro: '#4b5563',
 };
 
-export const DEFAULT_PINS = {
+export const DEFAULT_PINS: Record<string, string> = {
   admin: '1234',
   recepcion: '0000',
   gabi: '2345',
   vol: '0000',
+  vol1: '1111',
+  vol2: '2222',
 };
+
+export function getAppPins(): Record<string, string> {
+  try {
+    const saved = localStorage.getItem('bn_p');
+    if (saved) return { ...DEFAULT_PINS, ...JSON.parse(saved) };
+  } catch (_) {}
+  return { ...DEFAULT_PINS };
+}
+
+export function saveAppPins(pins: Record<string, string>): void {
+  try {
+    localStorage.setItem('bn_p', JSON.stringify(pins));
+  } catch (_) {}
+}
 
 export const USER_META: Record<string, { name: string; role: string }> = {
   admin: { name: 'Propietario', role: 'Modo Completo' },
   recepcion: { name: 'Recepción', role: 'Día a Día (Solo Calendario)' },
   gabi: { name: 'Gabi', role: 'Administración' },
   vol: { name: 'Recepción', role: 'Día a Día (Solo Calendario)' },
+  vol1: { name: 'Voluntario 1', role: 'Mi Agenda Worldpackers' },
+  vol2: { name: 'Voluntario 2', role: 'Mi Agenda Worldpackers' },
 };
 
 // Supabase config
@@ -211,12 +470,18 @@ export function calcFinancials(r: Partial<Reserva>): CalcResult {
   const subTotal = sub + plusTotal;
 
   const comCfg = getComisionesCfg();
-  let pctAirbnb = comCfg.airbnb;
+  let pct = 0;
   if (r.comision != null && !isNaN(Number(r.comision))) {
-    pctAirbnb = Number(r.comision);
+    pct = Number(r.comision);
+  } else if (r.plataforma === 'Airbnb') {
+    pct = comCfg.airbnb ?? 15;
+  } else if (r.plataforma === 'Booking') {
+    pct = comCfg.booking ?? 15;
+  } else {
+    pct = 0;
   }
-  const com = r.plataforma === 'Airbnb' ? subTotal * (pctAirbnb / 100) : 0;
-  const bkCom = r.plataforma === 'Booking' && r.estado === 'Shown' ? subTotal * (comCfg.booking / 100) : 0;
+  const com = subTotal * (pct / 100);
+  const bkCom = r.plataforma === 'Booking' && r.estado === 'Shown' ? subTotal * ((comCfg.booking || 15) / 100) : 0;
 
   return {
     n,

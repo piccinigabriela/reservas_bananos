@@ -39,39 +39,57 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
   const [nac, setNac] = useState<string>(initialData?.nac || '');
   const [checkin, setCheckin] = useState<string>(initialData?.checkin || '');
   const [checkout, setCheckout] = useState<string>(initialData?.checkout || '');
-  const [precio, setPrecio] = useState<number | string>(initialData?.precio || '');
+  const [precio, setPrecio] = useState<number | string>(() => {
+    if (initialData?.precio !== undefined && initialData?.precio !== null) return initialData.precio;
+    return '';
+  });
+  const [totalEstadiaInput, setTotalEstadiaInput] = useState<number | string>('');
   const [moneda, setMoneda] = useState<'ARS' | 'USD'>(initialData?.moneda || (initialData?.plataforma === 'Airbnb' ? 'USD' : 'ARS'));
   const [pax, setPax] = useState<number>(initialData?.pax || 2);
-  const [plus, setPlus] = useState<number | string>(initialData?.plus || 0);
+  const [plus, setPlus] = useState<number | string>(initialData?.plus !== undefined && initialData?.plus !== null ? initialData.plus : 0);
   const [plataforma, setPlataforma] = useState<string>(initialData?.plataforma || 'Directo');
-  const [comisionAirbnb, setComisionAirbnb] = useState<number>(() => {
-    if (initialData?.comision != null) return Number(initialData.comision);
-    return 15;
+  const [comision, setComision] = useState<number | string>(() => {
+    if (initialData?.comision !== undefined && initialData?.comision !== null) return initialData.comision;
+    if (initialData?.plataforma === 'Airbnb') return 15;
+    if (initialData?.plataforma === 'Booking') return 15;
+    return 0;
   });
   const [estado, setEstado] = useState<EstadoReserva>(initialData?.estado || 'Confirmada');
   const [destino, setDestino] = useState<string>(initialData?.destino || '');
   const [notas, setNotas] = useState<string>(initialData?.notas || '');
-  const [sena, setSena] = useState<number | string>(initialData?.sena || 0);
-  const [saldo, setSaldo] = useState<number | string>(initialData?.saldo || 0);
+  const [sena, setSena] = useState<number | string>(initialData?.sena !== undefined && initialData?.sena !== null ? initialData.sena : 0);
+  const [saldo, setSaldo] = useState<number | string>(initialData?.saldo !== undefined && initialData?.saldo !== null ? initialData.saldo : 0);
   const [early, setEarly] = useState<boolean>(initialData?.early || false);
   const [late, setLate] = useState<boolean>(initialData?.late || false);
 
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  const noches = nightsCount(checkin, checkout);
+
   useEffect(() => {
     if (isOpen) {
+      const p = initialData?.precio !== undefined && initialData?.precio !== null ? initialData.precio : '';
+      const ci = initialData?.checkin || '';
+      const co = initialData?.checkout || '';
+      const n = nightsCount(ci, co);
+
       setDepto(initialData?.depto || 'C2');
       setHuesped(initialData?.huesped || '');
       setTel(initialData?.tel || '');
       setNac(initialData?.nac || '');
-      setCheckin(initialData?.checkin || '');
-      setCheckout(initialData?.checkout || '');
-      setPrecio(initialData?.precio !== undefined && initialData?.precio !== null ? initialData.precio : '');
+      setCheckin(ci);
+      setCheckout(co);
+      setPrecio(p);
+      setTotalEstadiaInput(p !== '' && n > 0 ? Math.round(Number(p) * n) : '');
       setMoneda(initialData?.moneda || (initialData?.plataforma === 'Airbnb' ? 'USD' : 'ARS'));
       setPax(initialData?.pax || 2);
       setPlus(initialData?.plus !== undefined && initialData?.plus !== null ? initialData.plus : 0);
       setPlataforma(initialData?.plataforma || 'Directo');
-      setComisionAirbnb(initialData?.comision != null ? Number(initialData.comision) : 15);
+      setComision(
+        initialData?.comision !== undefined && initialData?.comision !== null
+          ? initialData.comision
+          : (initialData?.plataforma === 'Airbnb' ? 15 : initialData?.plataforma === 'Booking' ? 15 : 0)
+      );
       setEstado(initialData?.estado || 'Confirmada');
       setDestino(initialData?.destino || '');
       setNotas(initialData?.notas || '');
@@ -82,6 +100,28 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       setErrorMessage('');
     }
   }, [isOpen, initialData]);
+
+  // Sincronizar total cuando cambia precio por noche o noches
+  const handlePrecioNocheChange = (val: string) => {
+    setPrecio(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && noches > 0) {
+      setTotalEstadiaInput(Math.round(num * noches));
+    } else if (val === '') {
+      setTotalEstadiaInput('');
+    }
+  };
+
+  // Sincronizar precio por noche cuando el usuario escribe el total acordado
+  const handleTotalEstadiaChange = (val: string) => {
+    setTotalEstadiaInput(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && noches > 0) {
+      setPrecio(Math.round((num / noches) * 100) / 100);
+    } else if (val === '') {
+      setPrecio('');
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -94,18 +134,21 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
     plus: Number(plus) || 0,
     plataforma,
     moneda,
-    comision: plataforma === 'Airbnb' ? comisionAirbnb : undefined,
+    comision: comision !== '' && !isNaN(Number(comision)) ? Number(comision) : undefined,
     estado,
   });
-
-  const noches = nightsCount(checkin, checkout);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
-    if (!depto || !huesped.trim() || !checkin || !checkout || !precio) {
-      setErrorMessage('Por favor completá los campos obligatorios: Cabaña, Huésped, Fechas y Precio.');
+    if (!depto || !huesped.trim() || !checkin || !checkout) {
+      setErrorMessage('Por favor completá los campos obligatorios: Cabaña, Huésped y Fechas.');
+      return;
+    }
+
+    if (precio === '' || isNaN(Number(precio)) || Number(precio) < 0) {
+      setErrorMessage('Por favor ingresá un precio válido por noche (o 0 si es cortesía).');
       return;
     }
 
@@ -149,8 +192,18 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       }
     }
 
+    // Convertir ID de iCal a ID permanente para que nunca más sea reemplazado por la sincronización
+    let targetId = initialData?.id;
+    if (!targetId || targetId.startsWith('ical-')) {
+      targetId = 'res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+    }
+
+    const finalComision = comision !== '' && !isNaN(Number(comision)) 
+      ? Number(comision) 
+      : (plataforma === 'Airbnb' || plataforma === 'Booking' ? 15 : 0);
+
     onSave({
-      ...(initialData?.id ? { id: initialData.id } : {}),
+      id: targetId,
       depto,
       huesped: huesped.trim(),
       tel: tel.trim(),
@@ -162,7 +215,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       pax: Number(pax) || 2,
       plus: Number(plus) || 0,
       plataforma,
-      comision: plataforma === 'Airbnb' ? comisionAirbnb : null,
+      comision: finalComision,
       estado,
       destino,
       notas: notas.trim(),
@@ -380,40 +433,84 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
               <span>3. Precio y Pagos</span>
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
-                  Precio por Noche *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={precio}
-                  onChange={e => setPrecio(e.target.value)}
-                  placeholder="Ej: 35 o 60000"
-                  className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm sm:text-base font-bold text-[#2A2118] outline-none"
-                  required
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-[#4A3C2F]">
+                    Precio por Noche *
+                  </label>
+                  <span className="text-[11px] font-bold text-[#D2502A]">
+                    {moneda === 'USD' ? 'USD (US$)' : 'ARS ($)'}
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 font-bold text-[#8C765C] text-sm">
+                    {moneda === 'USD' ? 'US$' : '$'}
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={precio}
+                    onChange={e => handlePrecioNocheChange(e.target.value)}
+                    placeholder="Ej: 35 o 60000"
+                    className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg pl-10 pr-3 py-2 text-sm sm:text-base font-bold text-[#2A2118] outline-none"
+                    required
+                  />
+                </div>
+                <span className="text-[10px] text-[#7A6752] mt-0.5 block">
+                  Tarifa base unitaria por noche
+                </span>
               </div>
 
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-[#4A3C2F]">
+                    Total Estadía ({noches > 0 ? `${noches} ${noches === 1 ? 'noche' : 'noches'}` : 'ingresá fechas'})
+                  </label>
+                  <span className="text-[10px] text-[#2E7D32] font-semibold bg-[#E2EDDC] px-1.5 py-0.5 rounded">
+                    Sincronizado
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 font-bold text-[#8C765C] text-sm">
+                    {moneda === 'USD' ? 'US$' : '$'}
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={totalEstadiaInput}
+                    onChange={e => handleTotalEstadiaChange(e.target.value)}
+                    placeholder={noches > 0 ? `Ej: ${noches * 50000}` : 'Elegí fechas primero'}
+                    disabled={noches <= 0}
+                    className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg pl-10 pr-3 py-2 text-sm sm:text-base font-bold text-[#2A2118] outline-none disabled:opacity-60"
+                  />
+                </div>
+                <span className="text-[10px] text-[#7A6752] mt-0.5 block">
+                  Podés escribir el total acordado y se calcula la tarifa diaria
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
                 <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
-                  Moneda
+                  Moneda de Cobro
                 </label>
                 <select
                   value={moneda}
                   onChange={e => setMoneda(e.target.value as 'ARS' | 'USD')}
                   className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm font-semibold text-[#2A2118] outline-none"
                 >
-                  <option value="ARS">ARS ($)</option>
-                  <option value="USD">USD (US$)</option>
+                  <option value="ARS">Pesos Argentinos — ARS ($)</option>
+                  <option value="USD">Dólares — USD (US$)</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
-                  Pasajero Extra (Plus)
+                  Pasajero Extra / noche (Plus)
                 </label>
                 <input
                   type="number"
@@ -428,7 +525,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-[#4A3C2F] mb-1">
-                  Plataforma / Canal
+                  Plataforma / Canal de Venta
                 </label>
                 <select
                   value={plataforma}
@@ -437,8 +534,13 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                     setPlataforma(val);
                     if (val === 'Airbnb') {
                       setMoneda('USD');
-                    } else {
+                      if (comision === '' || comision === 0 || comision === '0') setComision(15);
+                    } else if (val === 'Booking') {
                       setMoneda('ARS');
+                      if (comision === '' || comision === 0 || comision === '0') setComision(15);
+                    } else if (val === 'Directo') {
+                      setMoneda('ARS');
+                      setComision(0);
                     }
                   }}
                   className="w-full bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-2 text-sm font-semibold text-[#2A2118] outline-none"
@@ -467,22 +569,65 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
               </div>
             )}
 
-            {/* Comisión específica de Airbnb */}
-            {plataforma === 'Airbnb' && (
-              <div className="bg-[#FFF6F6] p-3 rounded-lg border border-[#F9D2D2]">
-                <label className="block text-xs font-semibold text-[#C0392B] mb-1">
-                  Comisión de Airbnb
+            {/* Configuración de Comisión de Plataforma / Canal */}
+            <div className="bg-[#FAF5EE] p-3 rounded-xl border-2 border-[#D4C3AE] space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#4A3C2F]">
+                  Comisión de Plataforma / Intermediario (%)
                 </label>
-                <select
-                  value={comisionAirbnb}
-                  onChange={e => setComisionAirbnb(Number(e.target.value))}
-                  className="w-full bg-white border border-[#EAA6A6] rounded-md px-3 py-1.5 text-xs sm:text-sm font-semibold"
-                >
-                  <option value="15">15% (comisión estándar para reservas nuevas)</option>
-                  <option value="3">3% (comisión para reservas anteriores)</option>
-                </select>
+                <span className="text-[11px] font-bold text-[#D2502A]">
+                  {fin.com > 0 ? `- ${formatMoney(fin.com)} deducidos` : '0% (Sin retención)'}
+                </span>
               </div>
-            )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Selector de opciones rápidas fijas */}
+                <select
+                  value={
+                    comision === 15 || comision === '15' ? '15' :
+                    comision === 10 || comision === '10' ? '10' :
+                    comision === 18 || comision === '18' ? '18' :
+                    comision === 20 || comision === '20' ? '20' :
+                    comision === 0 || comision === '0' || comision === '' ? '0' :
+                    'custom'
+                  }
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v !== 'custom') {
+                      setComision(Number(v));
+                    }
+                  }}
+                  className="w-full bg-white border border-[#C5B49E] focus:border-[#D2502A] rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold text-[#2A2118] outline-none"
+                >
+                  <option value="15">15% — Airbnb / Booking estándar</option>
+                  <option value="0">0% — Venta Directa (Sin comisión)</option>
+                  <option value="10">10% — Comisión 10%</option>
+                  <option value="18">18% — Plataforma / Canal externo</option>
+                  <option value="20">20% — Agencia / Intermediario</option>
+                  <option value="custom">✏️ Otro porcentaje personalizado...</option>
+                </select>
+
+                {/* Input numérico directo para que jamás quede vacío */}
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value={comision}
+                    onChange={e => setComision(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-white border border-[#C5B49E] focus:border-[#D2502A] rounded-lg pl-3 pr-8 py-2 text-xs sm:text-sm font-bold text-[#2A2118] outline-none"
+                  />
+                  <span className="absolute right-3 font-bold text-[#8C765C] text-xs pointer-events-none">
+                    %
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] text-[#7A6752] block">
+                Este porcentaje se descuenta del subtotal para calcular el <strong>Líquido Neto Real</strong> que ingresa al complejo.
+              </span>
+            </div>
 
             {/* Seña y Saldo */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">

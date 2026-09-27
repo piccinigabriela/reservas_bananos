@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { CABANAS, DN, DC, DEFAULT_PINS, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal, getFechaCorteCfg } from '../../services/cabinConfig';
-import { Reserva } from '../../types';
+import { CABANAS, DN, DC, DEFAULT_PINS, getAppPins, saveAppPins, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal, getFechaCorteCfg, getVolunteerNames, saveVolunteerNames } from '../../services/cabinConfig';
+import { Reserva, VolunteerId } from '../../types';
 import { downloadIcsFile } from '../../services/icalExport';
-import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle, Clock } from 'lucide-react';
+import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle, Clock, Users, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface ConfigViewProps {
   reservas: Reserva[];
@@ -22,14 +22,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onClearAllReservas,
 }) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  
   // PINs
-  const [pins, setPins] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('bn_p');
-      if (saved) return { ...DEFAULT_PINS, ...JSON.parse(saved) };
-    } catch (_) {}
-    return { ...DEFAULT_PINS };
-  });
+  const [pins, setPins] = useState<Record<string, string>>(() => getAppPins());
+
+  // Voluntarios Worldpackers
+  const [volNames, setVolNames] = useState<Record<VolunteerId, string>>(() => getVolunteerNames());
 
   // WhatsApp
   const [waAdmin, setWaAdmin] = useState(() => {
@@ -62,24 +60,26 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
   const handleSaveAll = () => {
     // Validar PINs
-    const keys = ['admin', 'gabi', 'vol'] as const;
-    for (const k of keys) {
-      if (!/^\d{4}$/.test(pins[k] || '')) {
-        alert(`El PIN de ${k} debe tener exactamente 4 números.`);
+    const requiredKeys = ['admin', 'recepcion', 'vol1', 'vol2'] as const;
+    for (const k of requiredKeys) {
+      const val = pins[k] || '';
+      if (val && !/^\d{4}$/.test(val)) {
+        alert(`El PIN de ${k} debe tener exactamente 4 dígitos numéricos.`);
         return;
       }
     }
 
-    localStorage.setItem('bn_p', JSON.stringify(pins));
+    saveAppPins(pins);
     localStorage.setItem('bn_wa', JSON.stringify({ admin: waAdmin.trim() }));
     localStorage.setItem('bn_com', JSON.stringify({ airbnb: comAirbnb, booking: comBooking }));
     localStorage.setItem('bn_moneda_plat', JSON.stringify(monedas));
     localStorage.setItem('bn_tc', String(tipoCambio));
     localStorage.setItem('bn_fecha_corte', fechaCorte.trim());
     localStorage.setItem('bn_ical', JSON.stringify(icalUrls));
+    saveVolunteerNames(volNames);
 
-    setSavedStatus('¡Configuración guardada con éxito! ✓');
-    setTimeout(() => setSavedStatus(''), 3000);
+    setSavedStatus('¡Configuración de voluntarios, PINs y parámetros guardada con éxito! ✓');
+    setTimeout(() => setSavedStatus(''), 3500);
   };
 
   const handleIcalChange = (key: string, val: string) => {
@@ -95,13 +95,13 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <span>Ajustes del Sistema</span>
           </h2>
           <p className="text-xs text-[#7A6752] mt-0.5">
-            Configuración de PINs, sincronizaciones iCal, comisiones y respaldos.
+            Configuración de PINs de 4 dígitos, nombres de voluntarios Worldpackers, sincronizaciones iCal y respaldos.
           </p>
         </div>
 
         <button
           onClick={handleSaveAll}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#D2502A] hover:bg-[#E55B33] text-white font-bold text-sm rounded-xl transition shadow-md"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#D2502A] hover:bg-[#E55B33] text-white font-bold text-sm rounded-xl transition shadow-md cursor-pointer"
         >
           <Save className="w-4 h-4" />
           <span>Guardar Cambios</span>
@@ -109,52 +109,194 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       </div>
 
       {savedStatus && (
-        <div className="p-3 bg-[#E2EDDC] border border-[#3F7D48] text-[#1E5624] font-bold text-sm rounded-xl text-center">
+        <div className="p-3 bg-[#E2EDDC] border border-[#3F7D48] text-[#1E5624] font-bold text-sm rounded-xl text-center shadow-xs">
           {savedStatus}
         </div>
       )}
 
-      {/* PINs de Acceso */}
+      {/* Voluntarios Worldpackers & Sus PINs de Acceso */}
+      <div className="bg-white border-2 border-emerald-600/30 rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-[#2A2118] flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-600" />
+              <span>Voluntarios Worldpackers (Nombres y PINs de Acceso)</span>
+            </h3>
+            <p className="text-xs text-[#7A6752] mt-1 leading-relaxed">
+              Cada voluntario ingresa a su propio calendario en su celular escribiendo su <strong>PIN de 4 dígitos</strong> (por ejemplo: los últimos 4 números de su celular).
+            </p>
+          </div>
+          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-full whitespace-nowrap">
+            Worldpackers
+          </span>
+        </div>
+
+        {/* Banner de ayuda rápida */}
+        <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-start gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <span>
+            <strong>¿Cómo funciona cuando llega un nuevo voluntario?</strong> Simplemente cambiás su nombre acá (ej: <em>"Lucas"</em>) y ponés un PIN de 4 dígitos (ej: <em>"9456"</em>). Cuando el voluntario abra la página en su teléfono y elija su usuario, ingresará ese PIN y verá exclusivamente sus tareas de parque, limpieza y días libres.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          {/* Tarjeta Voluntario 1 */}
+          <div className="bg-[#FAF5EE] border border-[#EAE0D2] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-[#2A2118] flex items-center gap-1.5">
+                <span className="text-base">🧑‍🌾</span>
+                <span>Voluntario 1</span>
+              </span>
+              <span className="text-[10px] bg-white border border-[#D4C3AE] text-[#5A4838] px-2 py-0.5 rounded-md font-semibold">
+                Perfil vol1
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">
+                Nombre / Identificación:
+              </label>
+              <input
+                type="text"
+                value={volNames.vol1 || ''}
+                onChange={e => setVolNames(v => ({ ...v, vol1: e.target.value }))}
+                placeholder="Ej: Lucas"
+                className="bg-white border border-[#D4C3AE] focus:border-emerald-600 rounded-lg px-3 py-1.5 text-sm font-bold text-[#2A2118] w-full outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">
+                PIN de Acceso (4 dígitos):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={pins.vol1 || ''}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setPins(p => ({ ...p, vol1: val }));
+                  }}
+                  placeholder="1111"
+                  className="bg-white border-2 border-[#D4C3AE] focus:border-emerald-600 rounded-lg px-3 py-1.5 text-center font-bold text-base text-[#2A2118] w-28 tracking-widest outline-none font-mono"
+                />
+                <span className="text-[11px] text-[#7A6752]">
+                  (ej: últimos 4 de su cel)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tarjeta Voluntario 2 */}
+          <div className="bg-[#FAF5EE] border border-[#EAE0D2] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-[#2A2118] flex items-center gap-1.5">
+                <span className="text-base">👩‍🌾</span>
+                <span>Voluntario 2</span>
+              </span>
+              <span className="text-[10px] bg-white border border-[#D4C3AE] text-[#5A4838] px-2 py-0.5 rounded-md font-semibold">
+                Perfil vol2
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">
+                Nombre / Identificación:
+              </label>
+              <input
+                type="text"
+                value={volNames.vol2 || ''}
+                onChange={e => setVolNames(v => ({ ...v, vol2: e.target.value }))}
+                placeholder="Ej: Elena"
+                className="bg-white border border-[#D4C3AE] focus:border-emerald-600 rounded-lg px-3 py-1.5 text-sm font-bold text-[#2A2118] w-full outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">
+                PIN de Acceso (4 dígitos):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={pins.vol2 || ''}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setPins(p => ({ ...p, vol2: val }));
+                  }}
+                  placeholder="2222"
+                  className="bg-white border-2 border-[#D4C3AE] focus:border-emerald-600 rounded-lg px-3 py-1.5 text-center font-bold text-base text-[#2A2118] w-28 tracking-widest outline-none font-mono"
+                />
+                <span className="text-[11px] text-[#7A6752]">
+                  (ej: últimos 4 de su cel)
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* PINs de Acceso General y Propietario */}
       <div className="bg-white border border-[#E5D7C5] rounded-xl p-5 shadow-xs space-y-4">
         <h3 className="text-sm font-bold text-[#2A2118] flex items-center gap-2">
           <Key className="w-4 h-4 text-[#D2502A]" />
-          <span>PINs de Acceso (4 dígitos)</span>
+          <span>PINs de Propietario y Recepción (4 dígitos)</span>
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-[#FAF4EB] p-3 rounded-lg border border-[#EFE2D2]">
-            <span className="font-bold text-xs text-[#2A2118] block">Hermano / Propietario</span>
-            <span className="text-[11px] text-[#7A6752] block mb-2">Modo Enfoque por defecto</span>
+          <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
+            <div>
+              <span className="font-bold text-xs text-[#2A2118] block">👑 Propietario / Admin</span>
+              <span className="text-[11px] text-[#7A6752] block">Acceso a balances y finanzas</span>
+            </div>
             <input
-              type="password"
+              type="text"
               maxLength={4}
               value={pins.admin || ''}
-              onChange={e => setPins(p => ({ ...p, admin: e.target.value }))}
-              className="bg-white border border-[#D4C3AE] rounded px-3 py-1 text-center font-bold text-base w-24 tracking-widest"
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '');
+                setPins(p => ({ ...p, admin: val }));
+              }}
+              placeholder="1234"
+              className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
             />
           </div>
 
-          <div className="bg-[#FAF4EB] p-3 rounded-lg border border-[#EFE2D2]">
-            <span className="font-bold text-xs text-[#2A2118] block">Gabi (Administradora)</span>
-            <span className="text-[11px] text-[#7A6752] block mb-2">Acceso completo</span>
+          <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
+            <div>
+              <span className="font-bold text-xs text-[#2A2118] block">🌿 Día a Día / Recepción</span>
+              <span className="text-[11px] text-[#7A6752] block">Calendario diario de cabañas</span>
+            </div>
             <input
-              type="password"
+              type="text"
+              maxLength={4}
+              value={pins.recepcion || pins.vol || ''}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '');
+                setPins(p => ({ ...p, recepcion: val, vol: val }));
+              }}
+              placeholder="0000"
+              className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
+            />
+          </div>
+
+          <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
+            <div>
+              <span className="font-bold text-xs text-[#2A2118] block">👩‍💼 Gabi (Administración)</span>
+              <span className="text-[11px] text-[#7A6752] block">Gestión completa</span>
+            </div>
+            <input
+              type="text"
               maxLength={4}
               value={pins.gabi || ''}
-              onChange={e => setPins(p => ({ ...p, gabi: e.target.value }))}
-              className="bg-white border border-[#D4C3AE] rounded px-3 py-1 text-center font-bold text-base w-24 tracking-widest"
-            />
-          </div>
-
-          <div className="bg-[#FAF4EB] p-3 rounded-lg border border-[#EFE2D2]">
-            <span className="font-bold text-xs text-[#2A2118] block">Voluntario / Ayudante</span>
-            <span className="text-[11px] text-[#7A6752] block mb-2">Solo ocupación y avisos</span>
-            <input
-              type="password"
-              maxLength={4}
-              value={pins.vol || ''}
-              onChange={e => setPins(p => ({ ...p, vol: e.target.value }))}
-              className="bg-white border border-[#D4C3AE] rounded px-3 py-1 text-center font-bold text-base w-24 tracking-widest"
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '');
+                setPins(p => ({ ...p, gabi: val }));
+              }}
+              placeholder="2345"
+              className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
             />
           </div>
         </div>

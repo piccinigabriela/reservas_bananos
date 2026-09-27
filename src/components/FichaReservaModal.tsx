@@ -11,7 +11,9 @@ import {
   esSinAsignar,
   tipoDeSinAsignar,
   TIPOS,
-  getMonedaPlatCfg
+  getMonedaPlatCfg,
+  SEMAFORO_CONFIG,
+  getCabinCleaningStatuses
 } from '../services/cabinConfig';
 import { 
   X, 
@@ -140,6 +142,50 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
 
         {/* Cuerpo de la ficha con scroll vertical asegurado */}
         <div className={`p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1 ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
+          {/* Indicador de Habilitación / Limpieza de la Cabaña */}
+          {!isUnassigned && (() => {
+            const allStatuses = getCabinCleaningStatuses();
+            const cabinInfo = allStatuses[reserva.depto as keyof typeof allStatuses];
+            const st = cabinInfo?.status || 'limpia';
+            const cfg = SEMAFORO_CONFIG[st];
+
+            return (
+              <div className={`px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-2xs ${
+                st === 'limpia' 
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : st === 'pendiente'
+                    ? 'bg-rose-50 border-rose-300 text-rose-900'
+                    : 'bg-amber-50 border-amber-300 text-amber-900'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{cfg?.icon || '🟢'}</span>
+                  <div>
+                    <span className="text-xs font-bold block leading-tight">
+                      Estado de la Cabaña: {cfg?.label || 'Limpia y Habilitada'}
+                    </span>
+                    <span className="text-[11px] opacity-80 block">
+                      {st === 'limpia' 
+                        ? '✓ Habilitada y lista para recibir al huésped y entregar la llave.'
+                        : st === 'pendiente'
+                          ? '⚠️ Desocupada. Pendiente de limpieza por el voluntario.'
+                          : '🟡 Ocupada actualmente por huéspedes.'}
+                    </span>
+                  </div>
+                </div>
+
+                <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded-md shrink-0 border ${
+                  st === 'limpia'
+                    ? 'bg-emerald-200/70 border-emerald-400 text-emerald-950'
+                    : st === 'pendiente'
+                      ? 'bg-rose-200/70 border-rose-400 text-rose-950'
+                      : 'bg-amber-200/70 border-amber-400 text-amber-950'
+                }`}>
+                  {cfg?.shortLabel || st}
+                </span>
+              </div>
+            );
+          })()}
+
           {/* Si es un bloqueo iCal */}
           {isIcal ? (
             <div className="bg-[#FAF3EA] border-2 border-[#D69654] rounded-xl p-4 text-center space-y-3">

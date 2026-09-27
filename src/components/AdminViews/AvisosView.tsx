@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Reserva } from '../../types';
-import { DN, DC, calcFinancials, formatMoney, formatDateEs } from '../../services/cabinConfig';
+import { DN, DC, calcFinancials, formatMoney, formatDateEs, getVolunteerTasks, getVolunteerNames, VOLUNTEER_TASK_META, VOLUNTEER_IDS } from '../../services/cabinConfig';
 import { 
   Bell, 
   MessageSquare, 
@@ -12,7 +12,9 @@ import {
   AlertCircle, 
   RefreshCw, 
   X,
-  ExternalLink
+  ExternalLink,
+  Users,
+  CheckCircle2
 } from 'lucide-react';
 import {
   getTelegramConfig,
@@ -251,6 +253,84 @@ export const AvisosView: React.FC<AvisosViewProps> = ({ reservas }) => {
           Coordiná la limpieza, entrega de llaves y confirmación por WhatsApp o Telegram con los huéspedes que llegan esta semana.
         </p>
       </div>
+
+      {/* Tareas de Voluntarios de Hoy */}
+      {(() => {
+        const tasks = getVolunteerTasks().filter(t => t.fecha === today);
+        const names = getVolunteerNames();
+
+        return (
+          <div className="bg-white border-2 border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-sm sm:text-base text-[#2A2118]">
+                  Actividades de Voluntarios Hoy ({formatDateEs(today)})
+                </h3>
+              </div>
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                Worldpackers
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {VOLUNTEER_IDS.map(volId => {
+                const volName = names[volId] || (volId === 'vol1' ? 'Voluntario 1' : 'Voluntario 2');
+                const task = tasks.find(t => t.voluntarioId === volId);
+
+                if (!task) {
+                  return (
+                    <div key={volId} className="p-3 bg-[#FAF5EE] border border-[#E5D7C5] rounded-xl flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-[#2A2118] block">{volName}</span>
+                        <span className="text-[#8C765C] italic">Sin tarea asignada para hoy</span>
+                      </div>
+                      <span className="text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-semibold">
+                        Libre / Pendiente
+                      </span>
+                    </div>
+                  );
+                }
+
+                const meta = VOLUNTEER_TASK_META[task.tipo] || VOLUNTEER_TASK_META.otro;
+                return (
+                  <div 
+                    key={volId} 
+                    className="p-3 rounded-xl border space-y-1 shadow-2xs"
+                    style={{
+                      backgroundColor: meta.bgLight,
+                      borderColor: meta.borderLight,
+                      color: meta.textLight,
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs block">{volName}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/60">
+                        {meta.label.split('/')[0]}
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold flex items-center gap-1.5">
+                      <span>{meta.icon}</span>
+                      <span className={task.completada ? 'line-through' : ''}>{task.titulo}</span>
+                      {task.completada && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline ml-1" />}
+                    </div>
+                    {task.horario && (
+                      <div className="text-[11px] opacity-80 font-mono">
+                        ⏰ Horario: {task.horario}
+                      </div>
+                    )}
+                    {task.notas && (
+                      <p className="text-[11px] italic bg-white/50 p-1.5 rounded mt-1">
+                        "{task.notas}"
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {upcoming.length === 0 ? (
         <div className="bg-white border border-[#E5D7C5] rounded-2xl p-12 text-center text-[#8C765C] space-y-2">
