@@ -123,6 +123,7 @@ export default function App() {
       syncIcalFeeds(loadedReservas).then(({ count, updatedReservas }) => {
         if (count > 0) {
           setReservas(updatedReservas);
+          saveReservas(updatedReservas).catch(err => console.warn('Error guardando sync iCal:', err));
         }
       });
     };

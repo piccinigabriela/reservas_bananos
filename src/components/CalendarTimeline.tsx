@@ -684,7 +684,9 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                 }`}
                               >
                                 <span className="text-[8px] sm:text-[9px] font-black truncate text-right leading-none max-w-full px-0.5" title={checkoutRes.huesped}>
-                                  {isIcalOut ? 'OUT' : `${guestOut} ${isCheckoutClean ? '✓' : '🔴'}`}
+                                  {isIcalOut && (!checkoutRes.huesped || checkoutRes.huesped.includes('Bloqueado') || checkoutRes.huesped.includes('Not available')) 
+                                    ? 'OUT' 
+                                    : `${guestOut.replace(/^🔒\s*/, '')} ${isCheckoutClean ? '✓' : '🔴'}`}
                                 </span>
                               </div>
 
@@ -706,7 +708,9 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                 title={`Check-in / Ocupada: ${res.huesped}`}
                               >
                                 <span className="text-[8px] sm:text-[9px] font-black truncate text-left leading-none max-w-full px-0.5" title={res.huesped}>
-                                  {isIcalIn ? 'IN' : guestIn}
+                                  {isIcalIn && (!res.huesped || res.huesped.includes('Bloqueado') || res.huesped.includes('Not available')) 
+                                    ? 'IN' 
+                                    : guestIn.replace(/^🔒\s*/, '')}
                                 </span>
                               </div>
                             </div>
@@ -724,6 +728,8 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         const checkinTaskInfo = isDayTaskDone 
                           ? ` · Tarea realizada por ${volCompletedName || 'Voluntario'}` 
                           : (volAssignedName ? ` · Tarea asignada a ${volAssignedName}` : '');
+
+                        const isGenericLock = !res.huesped || res.huesped === '🔒 Bloqueado' || res.huesped === 'Bloqueado' || res.huesped.toLowerCase().includes('not available');
 
                         return (
                           <td
@@ -746,12 +752,18 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                 style={{ backgroundColor: bgStyle }}
                                 title={`Llegada: ${res.huesped} (${nights} noches - ${res.plataforma})${checkinTaskInfo}`}
                               >
-                                {isIcal ? (
-                                  <Lock className="w-2.5 h-2.5 shrink-0" />
+                                {isIcal && isGenericLock ? (
+                                  <div className="flex items-center gap-1 opacity-90">
+                                    <Lock className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="text-[9px] font-bold">Bloqueo</span>
+                                  </div>
                                 ) : (
-                                  <span className={`${fontSize} font-black truncate leading-none text-left drop-shadow-xs tracking-tight`}>
-                                    {guestFirstName}
-                                  </span>
+                                  <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+                                    {isIcal && <Lock className="w-2.5 h-2.5 shrink-0 opacity-80" />}
+                                    <span className={`${fontSize} font-black truncate leading-none text-left drop-shadow-xs tracking-tight`}>
+                                      {guestFirstName.replace(/^🔒\s*/, '')}
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -830,19 +842,22 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                               style={{ backgroundColor: bgStyle }}
                               title={`${res.huesped} (${formatDateEs(res.checkin)} a ${formatDateEs(res.checkout)} - Ocupada)${stayTaskInfo}`}
                             >
-                              {isIcal ? (
+                              {isIcal && (!res.huesped || res.huesped === '🔒 Bloqueado' || res.huesped === 'Bloqueado' || res.huesped.toLowerCase().includes('not available')) ? (
                                 <div className="flex items-center gap-0.5 opacity-80">
                                   <Lock className="w-2.5 h-2.5 shrink-0" />
                                   <span className="text-[9px] hidden sm:inline">iCal</span>
                                 </div>
                               ) : (
                                 // Mostrar el nombre de forma limpia y continua a lo largo de la banda
-                                <span className="truncate leading-tight px-1 drop-shadow-xs font-semibold select-none">
-                                  {viewType === 'semana' 
-                                    ? guestFirstName
-                                    : (diffDays % 3 === 1 ? guestFirstName : '')
-                                  }
-                                </span>
+                                <div className="flex items-center gap-0.5 px-1 truncate min-w-0">
+                                  {isIcal && <Lock className="w-2.5 h-2.5 shrink-0 opacity-70" />}
+                                  <span className="truncate leading-tight drop-shadow-xs font-semibold select-none">
+                                    {viewType === 'semana' 
+                                      ? guestFirstName.replace(/^🔒\s*/, '')
+                                      : (diffDays % 3 === 1 ? guestFirstName.replace(/^🔒\s*/, '') : '')
+                                    }
+                                  </span>
+                                </div>
                               )}
                             </div>
                           </td>
