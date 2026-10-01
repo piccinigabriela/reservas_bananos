@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Reserva, CabinCode, Plataforma, EstadoReserva } from '../types';
 import { CABANAS, DN, DC } from '../services/cabinConfig';
-import { parseImportFile, ParsedImportItem } from '../services/calendarImportParser';
+import { parseImportFile, parseFreeText, ParsedImportItem } from '../services/calendarImportParser';
+import { fetchIcalFromUrl } from '../services/api';
 import {
   Upload,
   Calendar,
@@ -13,6 +14,13 @@ import {
   RefreshCw,
   PlusCircle,
   FileCode,
+  MessageSquare,
+  Sparkles,
+  HelpCircle,
+  Link2,
+  Globe,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 
 interface GoogleCalendarImportModalProps {
@@ -31,12 +39,91 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
   onDownloadBackup,
 }) => {
   const [step, setStep] = useState<'upload' | 'preview'>('upload');
+  const [inputTab, setInputTab] = useState<'url' | 'text' | 'file'>('url');
+  const [pastedText, setPastedText] = useState<string>('');
+  const [gcalUrl, setGcalUrl] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('bn_ical');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.gc_general || parsed.gc_C2 || '';
+      }
+    } catch (_) {}
+    return '';
+  });
+  const [isFetchingUrl, setIsFetchingUrl] = useState<boolean>(false);
+  const [copiedCabinLink, setCopiedCabinLink] = useState<string | null>(null);
+  const [showHowToGuide, setShowHowToGuide] = useState<boolean>(true);
   const [parsedItems, setParsedItems] = useState<ParsedImportItem[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
-  const [importMode, setImportMode] = useState<'replace' | 'append'>('replace');
+  const [importMode, setImportMode] = useState<'replace' | 'append'>('append');
 
   if (!isOpen) return null;
+
+  const handleFetchFromUrl = async () => {
+    setErrorMsg('');
+    const cleanUrl = gcalUrl.trim();
+    if (!cleanUrl) {
+      setErrorMsg('Por favor pegá la "Dirección secreta en formato iCal" de Google Calendar (o enlace .ics de Airbnb / Booking).');
+      return;
+    }
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      setErrorMsg('La URL debe comenzar con https://');
+      return;
+    }
+
+    setIsFetchingUrl(true);
+    try {
+      const icsText = await fetchIcalFromUrl(cleanUrl);
+      const items = parseImportFile(icsText, 'google-calendar.ics');
+      if (items.length === 0) {
+        setErrorMsg('El calendario se conectó correctamente pero no contiene eventos de reserva en el rango de fechas actual o futuro.');
+        return;
+      }
+
+      // Guardar URL para que quede persistida en la configuración iCal
+      try {
+        const savedRaw = localStorage.getItem('bn_ical');
+        const urls = savedRaw ? JSON.parse(savedRaw) : {};
+        urls.gc_general = cleanUrl;
+        localStorage.setItem('bn_ical', JSON.stringify(urls));
+      } catch (_) {}
+
+      setFileName('Google Calendar (Sincronización en vivo)');
+      setParsedItems(items);
+      setStep('preview');
+    } catch (err: any) {
+      console.error('Error sincronizando calendario desde URL:', err);
+      setErrorMsg(err.message || 'Error al conectar con la URL de Google Calendar. Verificá que sea la dirección secreta en formato iCal (.ics).');
+    } finally {
+      setIsFetchingUrl(false);
+    }
+  };
+
+  const handleProcessPastedText = () => {
+    setErrorMsg('');
+    if (!pastedText.trim()) {
+      setErrorMsg('Por favor pegá algún mensaje de WhatsApp, texto de Booking/Airbnb o listado de reservas.');
+      return;
+    }
+
+    try {
+      const items = parseFreeText(pastedText);
+      if (items.length === 0) {
+        setErrorMsg(
+          'No pudimos detectar fechas válidas en el texto. Probá con formatos como "15/10 al 18/10", "12 de octubre al 16 de octubre", o mencionando la cabaña (C2, C3, etc.).'
+        );
+        return;
+      }
+      setFileName('Texto / WhatsApp copiado');
+      setParsedItems(items);
+      setStep('preview');
+    } catch (err) {
+      console.error('Error procesando texto:', err);
+      setErrorMsg('Ocurrió un error al procesar el texto ingresado.');
+    }
+  };
 
   const handleFileChange = (file: File) => {
     setErrorMsg('');
@@ -164,58 +251,345 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {step === 'upload' ? (
             <div className="space-y-4">
-              {/* Información sobre formatos admitidos */}
-              <div className="bg-[#222933] border border-[#2D3540] rounded-xl p-4 text-xs text-[#94A3B8] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white text-sm flex items-center gap-1.5">
-                    <FileCode className="w-4 h-4 text-[#60A5FA]" />
-                    Formatos compatibles: Archivos .ics y .csv
-                  </span>
-                  {existingReservasCount > 0 && (
-                    <span className="px-2 py-0.5 bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#93C5FD] rounded-full text-[11px] font-semibold">
-                      {existingReservasCount} reservas actuales en la app
-                    </span>
-                  )}
-                </div>
-
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>
-                    <strong>Google Calendar (.ics o .csv):</strong> Podés exportar tu calendario desde Google Calendar ➔ Configuración ➔ Importar y exportar. Admite tanto el archivo <code>.ics</code> descargado como archivos <code>.csv</code>.
-                  </li>
-                  <li>
-                    <strong>Planillas de reservas (.csv):</strong> Detecta automáticamente columnas de Cabaña, Huésped, Fechas de Entrada/Salida, Teléfono, Precio y Plataforma.
-                  </li>
-                  <li>
-                    <strong>Sin superposiciones:</strong> En el siguiente paso podrás elegir si querés <em>reemplazar las reservas previas</em> (para que no queden duplicadas) o sumar solo las nuevas.
-                  </li>
-                </ul>
+              {/* Selector de método: Enlace Automático vs Pegar Texto vs Subir Archivo */}
+              <div className="flex bg-[#12151A] p-1 rounded-xl border border-[#2D3540] max-w-xl">
+                <button
+                  type="button"
+                  onClick={() => setInputTab('url')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                    inputTab === 'url'
+                      ? 'bg-[#2563EB] text-white shadow-sm'
+                      : 'text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>Enlace Automático (Google Calendar)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputTab('text')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                    inputTab === 'text'
+                      ? 'bg-[#2563EB] text-white shadow-sm'
+                      : 'text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>WhatsApp / Texto</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputTab('file')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                    inputTab === 'file'
+                      ? 'bg-[#2563EB] text-white shadow-sm'
+                      : 'text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Archivo (.ics)</span>
+                </button>
               </div>
 
-              {/* Zona de Drop / Carga de Archivos */}
-              <label className="border-2 border-dashed border-[#3B82F6]/50 hover:border-[#3B82F6] bg-[#12151A]/80 hover:bg-[#12151A] rounded-2xl p-8 sm:p-12 flex flex-col items-center justify-center cursor-pointer transition text-center space-y-3">
-                <div className="w-14 h-14 rounded-2xl bg-[#2563EB]/10 flex items-center justify-center border border-[#2563EB]/30">
-                  <Upload className="w-7 h-7 text-[#60A5FA]" />
+              {inputTab === 'url' ? (
+                <div className="space-y-4">
+                  {/* Tarjeta de conexión directa */}
+                  <div className="bg-[#222933] border border-[#2D3540] rounded-xl p-4 text-xs text-[#94A3B8] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-sm flex items-center gap-2">
+                        <Link2 className="w-4 h-4 text-[#60A5FA]" />
+                        Sincronización en Automático desde Google Calendar
+                      </span>
+                      {existingReservasCount > 0 && (
+                        <span className="px-2 py-0.5 bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#93C5FD] rounded-full text-[11px] font-semibold">
+                          {existingReservasCount} reservas en app
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[#CBD5E1] leading-relaxed">
+                      Pegá aquí la <strong>"Dirección secreta en formato iCal"</strong> de tu Google Calendar (o tu link de Airbnb/Booking). El sistema se conectará directamente a los servidores de Google y traerá tus reservas en tiempo real sin que tengas que descargar ni subir archivos manualmente.
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[11px] font-bold text-white block">
+                        Dirección secreta de Google Calendar (enlace iCal .ics):
+                      </label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="url"
+                          value={gcalUrl}
+                          onChange={e => setGcalUrl(e.target.value)}
+                          placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+                          className="flex-1 bg-[#12151A] border border-[#2D3540] focus:border-[#3B82F6] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-[#64748B] outline-none font-mono"
+                        />
+                        <button
+                          type="button"
+                          disabled={isFetchingUrl}
+                          onClick={handleFetchFromUrl}
+                          className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition shrink-0 cursor-pointer"
+                        >
+                          {isFetchingUrl ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Conectando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="w-4 h-4" />
+                              <span>Conectar y Traer Reservas</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Guía Paso a Paso Interactiva */}
+                  <div className="bg-[#1A1F26] border border-[#2D3540] rounded-xl p-4 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowHowToGuide(!showHowToGuide)}
+                      className="w-full flex items-center justify-between text-xs font-bold text-white hover:text-[#93C5FD] transition"
+                    >
+                      <span className="flex items-center gap-2">
+                        <HelpCircle className="w-4 h-4 text-[#F59E0B]" />
+                        ¿Cómo obtener este enlace en Google Calendar? (Paso a paso)
+                      </span>
+                      <span className="text-[11px] text-[#94A3B8]">
+                        {showHowToGuide ? '▲ Ocultar pasos' : '▼ Ver pasos'}
+                      </span>
+                    </button>
+
+                    {showHowToGuide && (
+                      <div className="text-xs text-[#94A3B8] space-y-2.5 pt-1 border-t border-[#2D3540]">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="bg-[#12151A] p-3 rounded-lg border border-[#2D3540] space-y-1">
+                            <span className="text-[10px] font-bold text-[#60A5FA] uppercase tracking-wider block">
+                              Paso 1 · Abrir Calendar
+                            </span>
+                            <p className="text-[#CBD5E1] text-[11px]">
+                              Entrá a <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="text-[#60A5FA] underline">calendar.google.com</a> desde tu computadora.
+                            </p>
+                          </div>
+
+                          <div className="bg-[#12151A] p-3 rounded-lg border border-[#2D3540] space-y-1">
+                            <span className="text-[10px] font-bold text-[#60A5FA] uppercase tracking-wider block">
+                              Paso 2 · Menú del Calendario
+                            </span>
+                            <p className="text-[#CBD5E1] text-[11px]">
+                              En el lateral izquierdo (Mis calendarios), pasá el mouse sobre tu calendario, clic en <strong>⋮ (3 puntos)</strong> y elegí <strong>"Configurar y compartir"</strong>.
+                            </p>
+                          </div>
+
+                          <div className="bg-[#12151A] p-3 rounded-lg border border-[#2D3540] space-y-1">
+                            <span className="text-[10px] font-bold text-[#60A5FA] uppercase tracking-wider block">
+                              Paso 3 · Dirección Secreta
+                            </span>
+                            <p className="text-[#CBD5E1] text-[11px]">
+                              Bajá hasta la sección <strong>"Integrar el calendario"</strong> y copiá la <strong>"Dirección secreta en formato iCal"</strong> (enlace que termina en <code>.ics</code>).
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-[#F59E0B]/10 border border-[#F59E0B]/30 rounded-lg text-[#FDE68A] text-[11px] flex items-start gap-2">
+                          <Sparkles className="w-4 h-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                          <span>
+                            <strong>Tip:</strong> Usá la dirección <em>secreta</em> (no la pública). De ese modo no necesitás hacer tu calendario visible en internet; la app se conecta de forma privada y segura.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sección Dirección Inversa: Ver Los Bananos en Google Calendar del Celular */}
+                  <div className="bg-[#1A1F26] border border-emerald-900/40 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-emerald-400 text-xs sm:text-sm flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-emerald-400" />
+                        ¿Querés ver las reservas de Los Bananos en tu celular (Google Calendar)?
+                      </span>
+                      <span className="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold rounded-full">
+                        En vivo
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-[#CBD5E1] leading-relaxed">
+                      Si querés que las reservas que cargues acá aparezcan automáticamente en la app de Google Calendar de tu celular, agregá el calendario de la cabaña con <strong>"Desde URL"</strong>:
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      {CABANAS.map(code => {
+                        const baseUrl = window.location.origin;
+                        const url = `${baseUrl}/api/ical/${code}.ics`;
+                        const isCopied = copiedCabinLink === code;
+
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(url);
+                              setCopiedCabinLink(code);
+                              setTimeout(() => setCopiedCabinLink(null), 2500);
+                            }}
+                            className={`p-2 rounded-lg border text-left text-xs transition flex flex-col justify-between ${
+                              isCopied
+                                ? 'bg-emerald-900/50 border-emerald-500 text-white'
+                                : 'bg-[#12151A] hover:bg-[#222933] border-[#2D3540] text-[#94A3B8] hover:text-white'
+                            }`}
+                          >
+                            <span className="font-bold text-white flex items-center justify-between">
+                              <span>{code}</span>
+                              {isCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-[#64748B]" />}
+                            </span>
+                            <span className="text-[10px] text-[#64748B] mt-1">
+                              {isCopied ? '¡Enlace copiado!' : 'Copiar iCal'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-[#94A3B8]">
+                      En Google Calendar (web) hacé clic en el <strong>"+"</strong> al lado de <em>"Otros calendarios"</em> ➔ <strong>"Desde URL"</strong> ➔ pegás el enlace copiado. ¡Y listo! Se actualizará solo en tu celular.
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <span className="font-bold text-sm sm:text-base text-white block">
-                    Arrastrá tu archivo .ics o .csv aquí
-                  </span>
-                  <span className="text-xs text-[#94A3B8] block">
-                    o hacé clic para buscar en tu dispositivo (Archivos .ics, .csv, .txt)
-                  </span>
+              ) : inputTab === 'text' ? (
+                <div className="space-y-3">
+                  <div className="bg-[#222933] border border-[#2D3540] rounded-xl p-4 text-xs text-[#94A3B8] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-sm flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-[#F59E0B]" />
+                        Importador Inteligente de Texto (WhatsApp, Booking, Airbnb)
+                      </span>
+                      {existingReservasCount > 0 && (
+                        <span className="px-2 py-0.5 bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#93C5FD] rounded-full text-[11px] font-semibold">
+                          {existingReservasCount} reservas actuales
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[#CBD5E1]">
+                      Copiá y pegá acá mensajes de WhatsApp, confirmaciones de Booking/Airbnb o una lista rápida. El sistema detecta automáticamente la cabaña (C2, C3, C5, etc.), el huésped, las fechas y los montos.
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <textarea
+                      rows={7}
+                      value={pastedText}
+                      onChange={e => setPastedText(e.target.value)}
+                      placeholder={`Ejemplos que podés pegar acá:
+
+• Mensajes de WhatsApp:
+"Juan Pérez Cabaña 3 del 15/10 al 18/10 $120.000 seña 40.000 tel 3512345678"
+"C6 Reserva Mariana Gomez 10 de noviembre al 14 de noviembre Booking"
+"C7 Jacuzzi Lucas Díaz 20 al 24 de octubre Airbnb"
+
+• O el texto completo de una confirmación de Booking / Airbnb`}
+                      className="w-full bg-[#12151A] border border-[#2D3540] focus:border-[#3B82F6] rounded-xl p-3.5 text-xs text-white placeholder-[#64748B] focus:outline-none resize-y font-mono"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPastedText('')}
+                      className="text-xs text-[#94A3B8] hover:text-white"
+                    >
+                      Limpiar texto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleProcessPastedText}
+                      className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg transition"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>Analizar y Detectar Reservas</span>
+                    </button>
+                  </div>
                 </div>
-                <input
-                  type="file"
-                  accept=".ics,.csv,.txt"
-                  className="hidden"
-                  onChange={e => {
-                    if (e.target.files?.[0]) {
-                      handleFileChange(e.target.files[0]);
-                      e.target.value = '';
-                    }
-                  }}
-                />
-              </label>
+              ) : (
+                <div className="space-y-4">
+                  {/* Información sobre formatos admitidos */}
+                  <div className="bg-[#222933] border border-[#2D3540] rounded-xl p-4 text-xs text-[#94A3B8] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-sm flex items-center gap-1.5">
+                        <FileCode className="w-4 h-4 text-[#60A5FA]" />
+                        Formatos compatibles: Archivos .ics, .csv y .json
+                      </span>
+                      {existingReservasCount > 0 && (
+                        <span className="px-2 py-0.5 bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#93C5FD] rounded-full text-[11px] font-semibold">
+                          {existingReservasCount} reservas actuales en la app
+                        </span>
+                      )}
+                    </div>
+
+                    <ul className="list-disc pl-4 space-y-1">
+                      <li>
+                        <strong>Google Calendar (.ics):</strong> El formato estándar de Google. Exporta todos los eventos y fechas anotadas.
+                      </li>
+                      <li>
+                        <strong>iCal de Booking y Airbnb (.ics):</strong> Descargá el calendario exportado de Airbnb o Booking y arrastralo aquí.
+                      </li>
+                      <li>
+                        <strong>Planillas Excel / Google Sheets (.csv):</strong> Detecta columnas de Cabaña, Huésped, Fechas, Teléfono, Precio y Canal.
+                      </li>
+                      <li>
+                        <strong>Backup de la app (.json):</strong> Copia de seguridad guardada previamente.
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Instrucciones paso a paso para descargar de Google Calendar */}
+                  <div className="bg-[#12151A] border border-[#2D3540] rounded-xl p-3.5 space-y-2.5 text-xs">
+                    <span className="font-bold text-white text-xs flex items-center gap-2">
+                      <HelpCircle className="w-4 h-4 text-[#60A5FA]" />
+                      ¿Cómo descargar tu archivo .ics de Google Calendar?
+                    </span>
+                    <ol className="list-decimal pl-4 space-y-1.5 text-[#CBD5E1] text-[11px]">
+                      <li>
+                        Entrá a <strong>calendar.google.com</strong> en tu computadora.
+                      </li>
+                      <li>
+                        Hacé clic en la <strong>Ruedita de engranaje (⚙️)</strong> arriba a la derecha ➔ <strong>"Configuración"</strong>.
+                      </li>
+                      <li>
+                        En el menú lateral izquierdo elegí <strong>"Importar y exportar"</strong> ➔ clic en el botón azul <strong>"Exportar"</strong>.
+                      </li>
+                      <li>
+                        Se descarga un archivo comprimido <code>.zip</code>. Hacé doble clic para abrirlo y arrastrá el archivo <code>.ics</code> que está adentro directamente aquí abajo.
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* Zona de Drop / Carga de Archivos */}
+                  <label className="border-2 border-dashed border-[#3B82F6]/50 hover:border-[#3B82F6] bg-[#12151A]/80 hover:bg-[#12151A] rounded-2xl p-8 sm:p-12 flex flex-col items-center justify-center cursor-pointer transition text-center space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-[#2563EB]/10 flex items-center justify-center border border-[#2563EB]/30">
+                      <Upload className="w-7 h-7 text-[#60A5FA]" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="font-bold text-sm sm:text-base text-white block">
+                        Arrastrá tu archivo .ics, .csv o .json aquí
+                      </span>
+                      <span className="text-xs text-[#94A3B8] block">
+                        o hacé clic para buscar en tu dispositivo (Archivos .ics, .csv, .json, .txt)
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".ics,.csv,.txt,.json"
+                      className="hidden"
+                      onChange={e => {
+                        if (e.target.files?.[0]) {
+                          handleFileChange(e.target.files[0]);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
 
               {/* Botón de Respaldo Preventivo */}
               {existingReservasCount > 0 && (

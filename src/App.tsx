@@ -5,7 +5,10 @@ import {
   saveReservas, 
   fetchGastos, 
   saveGastos, 
-  syncIcalFeeds 
+  syncIcalFeeds,
+  deleteReservaFromDb,
+  clearAllReservasFromDb,
+  deleteGastoFromDb
 } from './services/api';
 import { 
   CABANAS, 
@@ -210,13 +213,14 @@ export default function App() {
     await saveReservas(updated);
   };
 
-  // Eliminar reserva
+  // Eliminar reserva de forma puntual y segura
   const handleDeleteReserva = async (id: string) => {
     const updated = reservas.filter(r => r.id !== id);
     setReservas(updated);
     setSelectedReserva(null);
     showToast('Reserva eliminada');
-    await saveReservas(updated);
+    localStorage.setItem('bn_r', JSON.stringify(updated));
+    await deleteReservaFromDb(id);
   };
 
   // Asignar cabaña física a una reserva sin asignar de Booking
@@ -242,7 +246,7 @@ export default function App() {
   };
 
   // Importar reservas desde Google Calendar (.ics o .csv)
-  const handleImportGoogleCalendar = async (newReservas: Reserva[], mode: 'replace' | 'append' = 'replace') => {
+  const handleImportGoogleCalendar = async (newReservas: Reserva[], mode: 'replace' | 'append' = 'append') => {
     let updated: Reserva[];
     if (mode === 'replace') {
       updated = newReservas;
@@ -260,10 +264,11 @@ export default function App() {
     );
   };
 
-  // Vaciar todas las reservas previas
+  // Vaciar todas las reservas previas (acción destructiva deliberada)
   const handleClearAllReservas = async () => {
     setReservas([]);
-    await saveReservas([]);
+    localStorage.setItem('bn_r', JSON.stringify([]));
+    await clearAllReservasFromDb();
     showToast('Todas las reservas han sido eliminadas ✓');
   };
 
@@ -275,12 +280,13 @@ export default function App() {
     await saveGastos(updated);
   };
 
-  // Eliminar Gasto
+  // Eliminar Gasto de forma puntual y segura
   const handleDeleteGasto = async (id: string) => {
     const updated = gastos.filter(g => g.id !== id);
     setGastos(updated);
     showToast('Gasto eliminado');
-    await saveGastos(updated);
+    localStorage.setItem('bn_g', JSON.stringify(updated));
+    await deleteGastoFromDb(id);
   };
 
   // Guardar o modificar tarea de voluntario

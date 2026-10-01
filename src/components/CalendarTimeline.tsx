@@ -1039,8 +1039,8 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
         </div>
       </div>
 
-      {/* Resumen del Negocio de Este Mes Charcoal (Solo en Modo Propietario) */}
-      {!isReception ? (
+      {/* Resumen del Negocio de Este Mes Charcoal (Solo en Modo Propietario / No Voluntario ni Recepción) */}
+      {!isReception && !isVoluntarioView ? (
         (() => {
           const curM = today.getMonth();
           const curY = today.getFullYear();
@@ -1102,7 +1102,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
             </div>
           );
         })()
-      ) : (
+      ) : !isVoluntarioView ? (
         /* En Modo Día a Día: Mensaje limpio de calma cognitiva */
         <div className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
           isDarkMode ? 'bg-[#161A20] border-[#2D3540] text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
@@ -1114,7 +1114,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
             </span>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Tarjeta de ayuda rápida con casillas compartimentadas */}
       <div className={`border rounded-xl p-3 sm:p-4 flex items-start gap-3 text-xs sm:text-sm transition-colors ${
@@ -1132,7 +1132,11 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
           <p className="leading-relaxed">
             • <strong>Casilla Compartimentada (OUT / IN):</strong> Cuando un huésped se va por la mañana y otro entra por la tarde, la casilla se divide a la mitad. Tocá el lado izquierdo para ver a quien sale o el derecho para ver a quien entra.
             <br />
-            • <strong>Tocar cualquier reserva:</strong> Abre la ficha con el teléfono del huésped, señas, saldo pendiente y desglose de ganancias.
+            {isVoluntarioView ? (
+              <>• <strong>Tocar cualquier reserva:</strong> Abre la ficha con el nombre del huésped, cantidad de personas y notas operativas.</>
+            ) : (
+              <>• <strong>Tocar cualquier reserva:</strong> Abre la ficha con el teléfono del huésped, señas, saldo pendiente y desglose de ganancias.</>
+            )}
           </p>
         </div>
       </div>

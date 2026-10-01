@@ -113,6 +113,39 @@ app.get('/api/ical/:cabinCode.ics', async (req, res) => {
   }
 });
 
+// Proxy seguro para obtener calendarios iCal externos (Google Calendar, Airbnb, Booking) sin problemas de CORS
+app.get('/api/fetch-ical', async (req, res) => {
+  const targetUrl = req.query.url as string;
+  if (!targetUrl) {
+    return res.status(400).json({ error: 'URL requerida' });
+  }
+
+  try {
+    const cleanUrl = decodeURIComponent(targetUrl).trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      return res.status(400).json({ error: 'URL no válida' });
+    }
+
+    const response = await fetch(cleanUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) BananosCalendar/1.0',
+        Accept: 'text/calendar, text/plain, */*',
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `Error remoto del servidor de calendario (${response.status})` });
+    }
+
+    const text = await response.text();
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    return res.status(200).send(text);
+  } catch (err: any) {
+    console.error('Error en /api/fetch-ical proxy:', err);
+    return res.status(500).json({ error: err.message || 'Error descargando calendario' });
+  }
+});
+
 // Helper: Consultar reservas activas desde Supabase
 async function fetchSupabaseReservas(): Promise<any[]> {
   try {

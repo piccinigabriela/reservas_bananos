@@ -432,13 +432,35 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1.5">
           <div className="font-bold flex items-center gap-1.5 text-amber-950">
             <span className="text-base">🛡️</span>
-            <span>¿Cómo bloquear Airbnb automáticamente cuando cargás acá una reserva directa?</span>
+            <span>¿Cómo sincronizar con Google Calendar, Airbnb y Booking?</span>
           </div>
           <p className="leading-relaxed">
-            1. En Airbnb, andá a tu anuncio &gt; <strong>Disponibilidad &gt; Conectar calendarios &gt; Importar calendario</strong>.<br />
-            2. Descargá o copiá el enlace iCal de la cabaña abajo y pegalo en Airbnb con el nombre <em>"Los Bananos Directas"</em>.<br />
-            3. ¡Listo! Airbnb leerá tus reservas directas y <strong>bloqueará esas noches en Airbnb</strong> para que nadie más las pueda reservar.
+            • <strong>Para traer reservas de Google Calendar:</strong> En <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="underline font-bold">Google Calendar</a>, hacé clic en los 3 puntos ⋮ de tu calendario ➔ <em>Configurar y compartir</em> ➔ bajá hasta <strong>"Dirección secreta en formato iCal"</strong> y pegá ese link abajo.<br />
+            • <strong>Para bloquear Airbnb/Booking automáticamente con reservas de este sistema:</strong> Copiá el enlace iCal de la cabaña abajo y pegalo en Airbnb (<em>Disponibilidad &gt; Conectar calendarios &gt; Importar</em>) o Booking.
           </p>
+        </div>
+
+        {/* Google Calendar General */}
+        <div className="p-3.5 bg-blue-50/60 border border-blue-200 rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-xs text-blue-900 flex items-center gap-1.5">
+              <span>📅</span>
+              <span>Google Calendar General (Complejo completo o Cabañas)</span>
+            </span>
+            <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
+              Sincronización Automática
+            </span>
+          </div>
+          <p className="text-[11px] text-blue-800 leading-relaxed">
+            Si tenés un calendario único en Google donde anotas todas las reservas del complejo, pegá su dirección secreta iCal acá:
+          </p>
+          <input
+            type="url"
+            placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+            value={icalUrls['gc_general'] || ''}
+            onChange={e => handleIcalChange('gc_general', e.target.value)}
+            className="w-full bg-white border border-blue-300 focus:border-blue-600 rounded-md px-3 py-1.5 text-xs text-[#2A2118] font-mono outline-none"
+          />
         </div>
 
         <div className="space-y-4">
@@ -521,10 +543,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div>
                     <label className="text-[11px] font-bold text-[#FF5A5F] block mb-0.5">
-                      1. Importar desde Airbnb (URL iCal de Airbnb):
+                      1. Airbnb (iCal URL):
                     </label>
                     <input
                       type="url"
@@ -537,13 +559,26 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
                   <div>
                     <label className="text-[11px] font-bold text-[#003580] block mb-0.5">
-                      2. Importar desde Booking (URL iCal de Booking):
+                      2. Booking (iCal URL):
                     </label>
                     <input
                       type="url"
                       placeholder="https://ical.booking.com/..."
                       value={icalUrls['bk_' + code] || ''}
                       onChange={e => handleIcalChange('bk_' + code, e.target.value)}
+                      className="w-full bg-white border border-[#D4C3AE] rounded-md px-2.5 py-1 text-xs text-[#2A2118]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-[#2563EB] block mb-0.5">
+                      3. Google Calendar (iCal Secreto):
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://calendar.google.com/.../basic.ics"
+                      value={icalUrls['gc_' + code] || ''}
+                      onChange={e => handleIcalChange('gc_' + code, e.target.value)}
                       className="w-full bg-white border border-[#D4C3AE] rounded-md px-2.5 py-1 text-xs text-[#2A2118]"
                     />
                   </div>

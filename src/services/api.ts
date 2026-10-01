@@ -118,13 +118,26 @@ export async function fetchReservas(): Promise<Reserva[]> {
     });
     if (res.ok) {
       const remoto: any[] = await res.json();
-      if (remoto.length === 0 && local.length > 0) {
-        console.warn('Supabase devolvió 0 reservas pero hay locales. Conservando local.');
-        return local;
+      const parsedRemoto = remoto.map(parseReservaFromDb);
+
+      // Smart Merge: Nunca pisar reservas creadas localmente que aún no hayan impactado en remoto
+      const remoteIds = new Set(parsedRemoto.map(r => r.id));
+      const localUnsynced = local.filter(l => !remoteIds.has(l.id) && !l.id.startsWith('ical-'));
+
+      let finalReservas = parsedRemoto;
+      if (localUnsynced.length > 0) {
+        console.log(`Detectadas ${localUnsynced.length} reservas locales pendientes de sincronizar con Supabase. Preservando y guardando.`);
+        finalReservas = [...parsedRemoto, ...localUnsynced];
+        // Enviar a Supabase para persistir definitivamente
+        saveReservas(finalReservas).catch(err => console.warn('Error sincronizando reservas locales a Supabase:', err));
       }
-      const parsed = remoto.map(parseReservaFromDb);
-      localStorage.setItem('bn_r', JSON.stringify(parsed));
-      return parsed;
+
+      localStorage.setItem('bn_r', JSON.stringify(finalReservas));
+      try {
+        localStorage.setItem('bn_r_backup_safety', JSON.stringify(finalReservas));
+      } catch (_) {}
+
+      return finalReservas;
     }
   } catch (err) {
     console.warn('Supabase no disponible, usando localStorage:', err);
@@ -135,6 +148,9 @@ export async function fetchReservas(): Promise<Reserva[]> {
 export async function saveReservas(data: Reserva[]): Promise<boolean> {
   // Always save complete state to localStorage for offline reliability and immediate UI responsiveness
   localStorage.setItem('bn_r', JSON.stringify(data));
+  try {
+    localStorage.setItem('bn_r_backup_safety', JSON.stringify(data));
+  } catch (_) {}
 
   // Sanitize exact payload for Supabase database table
   const dbPayload = data.map(sanitizeReservaForDb);
@@ -150,14 +166,6 @@ export async function saveReservas(data: Reserva[]): Promise<boolean> {
     });
 
     if (res.ok) {
-      // Eliminar registros que ya no existen
-      const ids = dbPayload.map((r: any) => r.id);
-      if (ids.length > 0) {
-        await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=not.in.(${ids.map((id: string) => `"${id}"`).join(',')})`, {
-          method: 'DELETE',
-          headers: SB_HDR,
-        });
-      }
       return true;
     } else {
       const errText = await res.text();
@@ -167,6 +175,34 @@ export async function saveReservas(data: Reserva[]): Promise<boolean> {
     console.error('Error de red guardando en Supabase:', err);
   }
   return false;
+}
+
+// Eliminación puntual y segura de una única reserva (NUNCA borra en bloque)
+export async function deleteReservaFromDb(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: SB_HDR,
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Error eliminando reserva en Supabase:', err);
+    return false;
+  }
+}
+
+// Limpieza total explícita (solo cuando el usuario escribe "BORRAR" en el modal)
+export async function clearAllReservasFromDb(): Promise<boolean> {
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=neq.placeholder_none`, {
+      method: 'DELETE',
+      headers: SB_HDR,
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Error vaciando reservas en Supabase:', err);
+    return false;
+  }
 }
 
 export async function fetchGastos(): Promise<Gasto[]> {
@@ -202,20 +238,25 @@ export async function saveGastos(data: Gasto[]): Promise<boolean> {
       },
       body: JSON.stringify(data),
     });
-    if (res.ok) {
-      if (data.length > 0) {
-        const ids = data.map(g => g.id);
-        await fetch(`${SB_URL}/rest/v1/${SB_TABLE_G}?id=not.in.(${ids.map(id => `"${id}"`).join(',')})`, {
-          method: 'DELETE',
-          headers: SB_HDR,
-        });
-      }
-      return true;
-    }
+    return res.ok;
   } catch (err) {
     console.error('Error guardando gastos en Supabase:', err);
   }
   return false;
+}
+
+// Eliminación puntual y segura de un único gasto
+export async function deleteGastoFromDb(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE_G}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: SB_HDR,
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Error eliminando gasto en Supabase:', err);
+    return false;
+  }
 }
 
 // iCal synchronization
@@ -269,6 +310,51 @@ export function parseIcal(text: string, plat: string): Array<{ ci: string; co: s
   return events;
 }
 
+/**
+ * Descarga el contenido iCal (.ics) desde una URL (Google Calendar, Airbnb, Booking)
+ * usando el backend proxy para evitar restricciones CORS
+ */
+export async function fetchIcalFromUrl(targetUrl: string): Promise<string> {
+  const cleanUrl = targetUrl.trim();
+  if (!cleanUrl) throw new Error('URL vacía');
+
+  // 1. Probar primero el endpoint local del servidor Express
+  try {
+    const res = await fetch(`/api/fetch-ical?url=${encodeURIComponent(cleanUrl)}`);
+    if (res.ok) {
+      const text = await res.text();
+      if (text.includes('BEGIN:VCALENDAR')) return text;
+    }
+  } catch (e) {
+    console.warn('Fallo proxy local /api/fetch-ical, intentando alternativo:', e);
+  }
+
+  // 2. Fallback a proxy Cloudflare Worker
+  try {
+    const proxyUrl = `https://icalproxy.huuventa.workers.dev/?url=${encodeURIComponent(cleanUrl)}`;
+    const res = await fetch(proxyUrl);
+    if (res.ok) {
+      const text = await res.text();
+      if (text.includes('BEGIN:VCALENDAR')) return text;
+    }
+  } catch (e) {
+    console.warn('Fallo proxy secundario Cloudflare:', e);
+  }
+
+  // 3. Intento directo
+  try {
+    const res = await fetch(cleanUrl);
+    if (res.ok) {
+      const text = await res.text();
+      if (text.includes('BEGIN:VCALENDAR')) return text;
+    }
+  } catch (e) {
+    console.warn('Fallo fetch directo:', e);
+  }
+
+  throw new Error('No se pudo obtener el calendario desde la URL provista. Verificá que el enlace sea una "Dirección secreta en formato iCal" válida que termine en .ics');
+}
+
 export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count: number; updatedReservas: Reserva[] }> {
   const savedUrlsRaw = localStorage.getItem('bn_ical');
   const urls: Record<string, string> = savedUrlsRaw ? JSON.parse(savedUrlsRaw) : {};
@@ -277,30 +363,32 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
   CABANAS.forEach(code => {
     if (urls['ab_' + code]) tasks.push({ code, url: urls['ab_' + code], src: 'airbnb' });
     if (urls['bk_' + code]) tasks.push({ code, url: urls['bk_' + code], src: 'booking' });
+    if (urls['gc_' + code]) tasks.push({ code, url: urls['gc_' + code], src: 'google' });
   });
+
+  if (urls['gc_general']) {
+    tasks.push({ code: 'general', url: urls['gc_general'], src: 'google' });
+  }
 
   if (!tasks.length) {
     return { count: 0, updatedReservas: currentReservas };
   }
 
-  const PROXY = 'https://icalproxy.huuventa.workers.dev/?url=';
   let nuevasReservas = [...currentReservas];
   const today = new Date().toISOString().split('T')[0];
   let totalBloqueos = 0;
 
   for (const t of tasks) {
     try {
-      const res = await fetch(PROXY + encodeURIComponent(t.url));
-      if (!res.ok) continue;
-      const text = await res.text();
+      const text = await fetchIcalFromUrl(t.url);
       if (!text.includes('BEGIN:VCALENDAR')) continue;
 
       const events = parseIcal(text, t.src);
       // Remove ONLY unpriced lock placeholders for this cabin (never touch reservations with guest names, prices, or user edits)
       nuevasReservas = nuevasReservas.filter(r => {
-        if (r.depto !== t.code) return true;
+        if (t.code !== 'general' && r.depto !== t.code) return true;
         const isSyntheticLock = 
-          (r.icalUid || (r.id && r.id.startsWith('ical-' + t.code + '-'))) &&
+          (r.icalUid || (r.id && r.id.startsWith('ical-'))) &&
           (!r.precio || r.precio === 0) &&
           (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
         return !isSyntheticLock;
@@ -308,9 +396,10 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
 
       events.forEach(ev => {
         if (ev.co < today) return;
+        const targetCabin = t.code === 'general' ? 'C2' : t.code;
         const conflict = nuevasReservas.find(
           r =>
-            r.depto === t.code &&
+            r.depto === targetCabin &&
             r.estado !== 'Cancelada' &&
             r.estado !== 'Non show' &&
             r.estado !== 'Devolución' &&
@@ -320,9 +409,9 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
         // Only create an automated lock if there is no confirmed/priced reservation occupying those dates
         if (!conflict) {
           nuevasReservas.push({
-            id: 'ical-' + t.code + '-' + ev.uid.replace(/[^a-z0-9]/gi, '-').substr(0, 20),
+            id: 'ical-' + targetCabin + '-' + ev.uid.replace(/[^a-z0-9]/gi, '-').substr(0, 20),
             icalUid: ev.uid,
-            depto: t.code as any,
+            depto: targetCabin as any,
             huesped:
               ev.summary.includes('Not available') ||
               ev.summary.includes('Bloqueado') ||
@@ -337,10 +426,10 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
             precio: 0,
             pax: 2,
             plus: 0,
-            plataforma: t.src === 'booking' ? 'Booking' : 'Airbnb',
+            plataforma: t.src === 'booking' ? 'Booking' : t.src === 'airbnb' ? 'Airbnb' : 'Google',
             destino: '',
             estado: 'Confirmada',
-            notas: 'Bloqueo iCal · ' + t.src,
+            notas: 'Bloqueo iCal · ' + (t.src === 'google' ? 'Google Calendar' : t.src),
             early: false,
             late: false,
             sena: 0,

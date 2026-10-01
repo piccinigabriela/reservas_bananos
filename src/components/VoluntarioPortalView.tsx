@@ -579,6 +579,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
               volunteerNames={volNames}
               highlightVolunteerId={volunteerId}
               isVoluntarioView={true}
+              isReception={true}
               cabinStatuses={cabinStatuses}
               onUpdateCabinStatus={(depto, status) => onUpdateCabinStatus(depto, status, rawName)}
               defaultColorMode="semaforo_limpieza"

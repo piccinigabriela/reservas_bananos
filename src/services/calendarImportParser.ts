@@ -544,12 +544,267 @@ export function parseCsvContent(csvText: string): ParsedImportItem[] {
 }
 
 /**
- * Función universal para procesar el texto de un archivo (.ics o .csv)
+ * Mapeo de nombres de meses en español
+ */
+const SPANISH_MONTHS: Record<string, string> = {
+  ene: '01', enero: '01',
+  feb: '02', febrero: '02',
+  mar: '03', marzo: '03',
+  abr: '04', abril: '04',
+  may: '05', mayo: '05',
+  jun: '06', junio: '06',
+  jul: '07', julio: '07',
+  ago: '08', agosto: '08',
+  sep: '09', sept: '09', set: '09', septiembre: '09',
+  oct: '10', octubre: '10',
+  nov: '11', noviembre: '11',
+  dic: '12', diciembre: '12',
+};
+
+/**
+ * Extrae rango de fechas (checkin, checkout) desde una línea o texto libre
+ */
+export function extractDatesFromFreeText(text: string): { checkin: string; checkout: string } | null {
+  const currentYear = new Date().getFullYear();
+  const t = text.toLowerCase();
+
+  // 1. Formato tipo Booking / Airbnb: "Check-in: 12/10/2026 ... Check-out: 15/10/2026"
+  const mBooking = t.match(/(?:check-?in|llegada|entrada|desde)[:\s]+([0-9]{1,2}[-/][0-9]{1,2}(?:[-/][0-9]{2,4})?|\d{4}-\d{2}-\d{2}).*?(?:check-?out|salida|egreso|hasta)[:\s]+([0-9]{1,2}[-/][0-9]{1,2}(?:[-/][0-9]{2,4})?|\d{4}-\d{2}-\d{2})/i);
+  if (mBooking) {
+    const ci = normalizeDateToIso(mBooking[1]);
+    let co = normalizeDateToIso(mBooking[2]);
+    if (ci) {
+      if (!co || co <= ci) {
+        const d = new Date(ci + 'T12:00:00Z');
+        d.setDate(d.getDate() + 1);
+        co = d.toISOString().split('T')[0];
+      }
+      return { checkin: ci, checkout: co };
+    }
+  }
+
+  // 2. Nombres de meses: "12 de octubre al 15 de octubre" o "12 al 15 de octubre" o "12 oct - 15 oct"
+  const mMonthFull = t.match(/(\d{1,2})\s*(?:de\s*)?([a-záéíóú]{3,10})\s*(?:al?|-|a|hasta)\s*(\d{1,2})\s*(?:de\s*)?([a-záéíóú]{3,10})?(?:\s*(?:de\s*)?(\d{4}))?/i);
+  if (mMonthFull) {
+    const d1 = mMonthFull[1].padStart(2, '0');
+    const m1Raw = mMonthFull[2].normalize('NFD').replace(/[\u0300-\u036f]/g, '').slice(0, 3);
+    const d2 = mMonthFull[3].padStart(2, '0');
+    const m2Raw = mMonthFull[4] ? mMonthFull[4].normalize('NFD').replace(/[\u0300-\u036f]/g, '').slice(0, 3) : m1Raw;
+    const yr = mMonthFull[5] || String(currentYear);
+
+    const m1 = SPANISH_MONTHS[m1Raw] || SPANISH_MONTHS[mMonthFull[2]];
+    const m2 = SPANISH_MONTHS[m2Raw] || (mMonthFull[4] ? SPANISH_MONTHS[mMonthFull[4]] : m1);
+
+    if (m1 && m2) {
+      let ci = `${yr}-${m1}-${d1}`;
+      let co = `${yr}-${m2}-${d2}`;
+      if (co <= ci) {
+        // En caso de cambio de año (ej dic a ene)
+        const yrNext = String(parseInt(yr, 10) + 1);
+        co = `${yrNext}-${m2}-${d2}`;
+      }
+      return { checkin: ci, checkout: co };
+    }
+  }
+
+  // 3. Rango numérico con barra o guión: "15/10 al 18/10", "15/10/2026 al 18/10/2026", "15-10 a 18-10"
+  const mNumRange = t.match(/(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?\s*(?:al?|-|a|hasta)\s*(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?/i);
+  if (mNumRange) {
+    const d1 = mNumRange[1].padStart(2, '0');
+    const m1 = mNumRange[2].padStart(2, '0');
+    let y1 = mNumRange[3] || String(currentYear);
+    if (y1.length === 2) y1 = '20' + y1;
+
+    const d2 = mNumRange[4].padStart(2, '0');
+    const m2 = mNumRange[5].padStart(2, '0');
+    let y2 = mNumRange[6] || y1;
+    if (y2.length === 2) y2 = '20' + y2;
+
+    let ci = `${y1}-${m1}-${d1}`;
+    let co = `${y2}-${m2}-${d2}`;
+    if (co <= ci) {
+      const dObj = new Date(ci + 'T12:00:00Z');
+      dObj.setDate(dObj.getDate() + 1);
+      co = dObj.toISOString().split('T')[0];
+    }
+    return { checkin: ci, checkout: co };
+  }
+
+  // 4. Formato ISO: "2026-10-15 al 2026-10-18" o "2026-10-15 a 2026-10-18"
+  const mIso = t.match(/(\d{4}-\d{2}-\d{2})\s*(?:al?|-|a|hasta)\s*(\d{4}-\d{2}-\d{2})/i);
+  if (mIso) {
+    return { checkin: mIso[1], checkout: mIso[2] };
+  }
+
+  return null;
+}
+
+/**
+ * Parsea texto libre de WhatsApp, mensajes copiados, confirmaciones de Booking/Airbnb
+ */
+export function parseFreeText(rawText: string): ParsedImportItem[] {
+  if (!rawText || !rawText.trim()) return [];
+
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const results: ParsedImportItem[] = [];
+
+  // Ver si cada línea contiene una reserva independiente
+  lines.forEach((line, idx) => {
+    // Si la línea es demasiado corta o parece solo un separador
+    if (line.length < 5) return;
+
+    const dates = extractDatesFromFreeText(line);
+    if (!dates) return;
+
+    // Detectar cabaña
+    const { cabin, isUncertain } = detectCabinFromText(line);
+
+    // Detectar plataforma
+    let plat: Plataforma = 'Directo';
+    const lower = line.toLowerCase();
+    if (lower.includes('airbnb') || lower.includes('arb') || lower.includes('airbn')) {
+      plat = 'Airbnb';
+    } else if (lower.includes('booking') || lower.includes('boo')) {
+      plat = 'Booking';
+    } else if (lower.includes('whatsapp') || lower.includes('wpp') || lower.includes('wa')) {
+      plat = 'Directo';
+    }
+
+    // Detectar precio
+    const precio = parseDetectedPrice(line);
+
+    // Detectar teléfono
+    let tel = '';
+    const telMatch = line.match(/(?:tel|cel|telefono|teléfono|whatsapp|wa|wpp)?[:\s]*([+0-9\s\-()]{7,18})/i);
+    if (telMatch && telMatch[1].replace(/\D/g, '').length >= 7) {
+      tel = telMatch[1].trim();
+    }
+
+    // Limpiar huésped
+    // Quitar marcas de WhatsApp como "[12/10, 14:22] Juan:"
+    const cleanLine = line.replace(/^\[.*?\]\s*[^:]+:\s*/i, '');
+    const huesped = cleanGuestName(cleanLine);
+
+    // Pax
+    let pax = 2;
+    const paxMatch = line.match(/\bx\s*([1-9]|1[0-2])\b|(\d{1,2})\s*(?:personas?|pax|huespedes?)/i);
+    if (paxMatch) {
+      pax = parseInt(paxMatch[1] || paxMatch[2], 10);
+    }
+
+    results.push({
+      id: `import-text-${Date.now().toString(36)}-${idx}`,
+      depto: cabin,
+      huesped,
+      tel,
+      checkin: dates.checkin,
+      checkout: dates.checkout,
+      precio,
+      plataforma: plat,
+      estado: 'Confirmada',
+      notas: `Texto importado: ${line.slice(0, 100)}`,
+      pax,
+      selected: true,
+      rawSource: line,
+      isUncertainCabin: isUncertain,
+    });
+  });
+
+  // Si no se encontró ninguna por línea individual, intentar procesar el bloque entero como una sola reserva
+  if (results.length === 0) {
+    const singleDates = extractDatesFromFreeText(rawText);
+    if (singleDates) {
+      const { cabin, isUncertain } = detectCabinFromText(rawText);
+      let plat: Plataforma = 'Directo';
+      const lower = rawText.toLowerCase();
+      if (lower.includes('airbnb') || lower.includes('arb')) plat = 'Airbnb';
+      else if (lower.includes('booking') || lower.includes('boo')) plat = 'Booking';
+
+      const precio = parseDetectedPrice(rawText);
+      const huesped = cleanGuestName(lines[0] || 'Huésped Detectado');
+
+      results.push({
+        id: `import-text-block-${Date.now().toString(36)}`,
+        depto: cabin,
+        huesped,
+        checkin: singleDates.checkin,
+        checkout: singleDates.checkout,
+        precio,
+        plataforma: plat,
+        estado: 'Confirmada',
+        notas: `Mensaje: ${rawText.slice(0, 120)}...`,
+        pax: 2,
+        selected: true,
+        rawSource: rawText.slice(0, 80),
+        isUncertainCabin: isUncertain,
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Parsea un archivo JSON (por ejemplo un backup de Los Bananos o lista de reservas exportadas)
+ */
+export function parseJsonContent(jsonText: string): ParsedImportItem[] {
+  try {
+    const data = JSON.parse(jsonText);
+    const list: any[] = Array.isArray(data)
+      ? data
+      : data.reservas && Array.isArray(data.reservas)
+      ? data.reservas
+      : [];
+    if (!Array.isArray(list) || list.length === 0) return [];
+
+    return list
+      .map((item: any, idx: number) => {
+        const { cabin, isUncertain } = detectCabinFromText(item.depto || item.cabana || '', item.depto);
+        const ci = normalizeDateToIso(item.checkin || item.desde || item.fechaInicio || '');
+        const co = normalizeDateToIso(item.checkout || item.hasta || item.fechaFin || '');
+        if (!ci || !co) return null;
+
+        return {
+          id: `import-json-${Date.now().toString(36)}-${idx}`,
+          depto: cabin,
+          huesped: item.huesped || item.cliente || item.nombre || 'Reserva Importada',
+          tel: item.tel || item.telefono || '',
+          checkin: ci,
+          checkout: co,
+          precio: Number(item.precio || item.importe || 0),
+          plataforma: item.plataforma || 'Directo',
+          estado: (item.estado as EstadoReserva) || 'Confirmada',
+          notas: item.notas || 'Importado desde archivo JSON',
+          pax: Number(item.pax || 2),
+          selected: true,
+          isUncertainCabin: isUncertain,
+        } as ParsedImportItem;
+      })
+      .filter((item): item is ParsedImportItem => item !== null);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Función universal para procesar el texto de un archivo (.ics, .csv, .json)
  */
 export function parseImportFile(content: string, fileName: string): ParsedImportItem[] {
-  const isIcs = fileName.toLowerCase().endsWith('.ics') || content.includes('BEGIN:VCALENDAR');
+  const lower = fileName.toLowerCase();
+  const trimmed = content.trim();
+
+  // Si es JSON
+  if (lower.endsWith('.json') || trimmed.startsWith('[') || (trimmed.startsWith('{') && trimmed.includes('"reservas"'))) {
+    const jsonItems = parseJsonContent(content);
+    if (jsonItems.length > 0) return jsonItems;
+  }
+
+  // Si es iCal / ICS
+  const isIcs = lower.endsWith('.ics') || content.includes('BEGIN:VCALENDAR');
   if (isIcs) {
     return parseIcsContent(content);
   }
+
+  // Por defecto procesar como CSV / Planilla
   return parseCsvContent(content);
 }
