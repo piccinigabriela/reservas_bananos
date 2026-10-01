@@ -19,7 +19,8 @@ import {
   getVolunteerNames,
   getCabinCleaningStatuses,
   saveCabinCleaningStatuses,
-  updateCabinCleaningStatus
+  updateCabinCleaningStatus,
+  getEffectiveCabinStatuses
 } from './services/cabinConfig';
 import { Header } from './components/Header';
 import { CalendarTimeline } from './components/CalendarTimeline';
@@ -410,6 +411,12 @@ export default function App() {
 
   const isDarkMode = theme === 'dark';
 
+  // Estado sincronizado e inteligente de cabañas en tiempo real
+  const effectiveCabinStatuses = React.useMemo(
+    () => getEffectiveCabinStatuses(cabinStatuses, reservas, volunteerTasks),
+    [cabinStatuses, reservas, volunteerTasks]
+  );
+
   // Si el usuario ingresó como Voluntario (Worldpackers 1 o 2)
   if (currentUser === 'vol1' || currentUser === 'vol2') {
     return (
@@ -424,7 +431,7 @@ export default function App() {
         }}
         isDarkMode={isDarkMode}
         onToggleTheme={handleToggleTheme}
-        cabinStatuses={cabinStatuses}
+        cabinStatuses={effectiveCabinStatuses}
         onUpdateCabinStatus={handleUpdateCabinStatus}
       />
     );
@@ -505,7 +512,7 @@ export default function App() {
                 isDyslexiaMode={isDyslexiaMode}
                 isDarkMode={isDarkMode}
                 isReception={isReception}
-                cabinStatuses={cabinStatuses}
+                cabinStatuses={effectiveCabinStatuses}
                 onUpdateCabinStatus={handleUpdateCabinStatus}
               />
             )}

@@ -107,6 +107,64 @@ export function saveCabinCleaningStatuses(statuses: Record<CabinCode, CabinStatu
   } catch (_) {}
 }
 
+/**
+ * Calcula el estado efectivo de limpieza y ocupación de cada cabaña para el día actual
+ * sincronizando automáticamente los check-outs del día, estadías activas y tareas de limpieza realizadas.
+ */
+export function getEffectiveCabinStatuses(
+  manualStatuses: Record<CabinCode, CabinStatusInfo>,
+  reservas: Reserva[],
+  volunteerTasks: VolunteerTask[] = [],
+  todayIso: string = new Date().toISOString().split('T')[0]
+): Record<CabinCode, CabinStatusInfo> {
+  const result: Record<CabinCode, CabinStatusInfo> = { ...getInitialCabinCleaningStatuses(), ...manualStatuses };
+
+  CABANAS.forEach(cabinCode => {
+    const manual = manualStatuses[cabinCode];
+    const isManualModifiedToday = manual?.updatedAt && manual.updatedAt.startsWith(todayIso) && manual?.updatedBy !== 'Sistema';
+
+    // Tarea de limpieza completada para hoy en esta cabaña
+    const completedCleaningToday = volunteerTasks.some(
+      t => t.depto === cabinCode && t.fecha === todayIso && t.completada
+    );
+
+    // Checkouts / Salidas hoy
+    const hasCheckoutToday = reservas.some(
+      r => r.depto === cabinCode && r.checkout === todayIso && r.estado !== 'Cancelada' && r.estado !== 'Non show'
+    );
+
+    // Estadía activa hoy (noche ocupada)
+    const isOccupiedTonight = reservas.some(
+      r => r.depto === cabinCode && r.checkin <= todayIso && r.checkout > todayIso && r.estado !== 'Cancelada' && r.estado !== 'Non show'
+    );
+
+    let status: CabinCleaningStatus = manual?.status || 'limpia';
+
+    if (hasCheckoutToday) {
+      if (completedCleaningToday || (isManualModifiedToday && manual?.status === 'limpia')) {
+        status = isOccupiedTonight ? 'ocupada' : 'limpia';
+      } else {
+        // En día de check-out, la cabaña requiere limpieza por defecto
+        status = 'pendiente';
+      }
+    } else if (isOccupiedTonight) {
+      status = manual?.status === 'pendiente' ? 'pendiente' : 'ocupada';
+    } else if (completedCleaningToday || (isManualModifiedToday && manual?.status === 'limpia')) {
+      status = 'limpia';
+    }
+
+    result[cabinCode] = {
+      depto: cabinCode,
+      status,
+      updatedAt: manual?.updatedAt || new Date().toISOString(),
+      updatedBy: manual?.updatedBy || 'Sistema',
+      notas: manual?.notas,
+    };
+  });
+
+  return result;
+}
+
 export function updateCabinCleaningStatus(
   depto: CabinCode, 
   status: CabinCleaningStatus, 

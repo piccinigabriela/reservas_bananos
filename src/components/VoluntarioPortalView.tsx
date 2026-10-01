@@ -7,6 +7,7 @@ import {
   DC, 
   CABANAS,
   SEMAFORO_CONFIG,
+  getEffectiveCabinStatuses,
   formatDateEs, 
   formatDateExtended, 
   nightsCount 
@@ -79,10 +80,16 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
     .filter(t => t.fecha >= today)
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  // Conteo de cabañas según semáforo
+  // Estado inteligente y sincronizado de cabañas en vivo
+  const effectiveCabinStatuses = React.useMemo(
+    () => getEffectiveCabinStatuses(cabinStatuses, reservas, tasks, today),
+    [cabinStatuses, reservas, tasks, today]
+  );
+
+  // Conteo de cabañas según semáforo en vivo
   const statusCounts = CABANAS.reduce(
     (acc, code) => {
-      const st = cabinStatuses[code]?.status || 'limpia';
+      const st = effectiveCabinStatuses[code]?.status || 'limpia';
       acc[st] = (acc[st] || 0) + 1;
       return acc;
     },
@@ -269,7 +276,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
               {/* Botonera de Cabañas Físicas */}
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-1">
                 {CABANAS.map(cabinCode => {
-                  const statusInfo = cabinStatuses[cabinCode] || { depto: cabinCode, status: 'limpia' };
+                  const statusInfo = effectiveCabinStatuses[cabinCode] || { depto: cabinCode, status: 'limpia' };
                   const cfg = SEMAFORO_CONFIG[statusInfo.status] || SEMAFORO_CONFIG.limpia;
 
                   return (
@@ -580,7 +587,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
               highlightVolunteerId={volunteerId}
               isVoluntarioView={true}
               isReception={true}
-              cabinStatuses={cabinStatuses}
+              cabinStatuses={effectiveCabinStatuses}
               onUpdateCabinStatus={(depto, status) => onUpdateCabinStatus(depto, status, rawName)}
               defaultColorMode="semaforo_limpieza"
               onSelectVolunteerSlot={(volId, dateIso, task) => {
@@ -639,7 +646,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
                 cabanasTurnoverHoy.map(r => {
                   const isCheckin = r.checkin === today;
                   const isCheckout = r.checkout === today;
-                  const cabinStatus = cabinStatuses[r.depto]?.status || 'limpia';
+                  const cabinStatus = effectiveCabinStatuses[r.depto]?.status || 'limpia';
 
                   return (
                     <div
