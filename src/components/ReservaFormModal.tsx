@@ -176,6 +176,11 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
         return;
       }
     } else {
+      const isSyntheticLock = (r: Reserva) =>
+        (r.id.startsWith('ical-') || Boolean(r.icalUid)) &&
+        (!r.precio || r.precio === 0) &&
+        (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
+
       const conflict = existingReservas.find(
         r =>
           r.id !== initialData?.id &&
@@ -183,6 +188,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
           r.estado !== 'Cancelada' &&
           r.estado !== 'Non show' &&
           r.estado !== 'Devolución' &&
+          !isSyntheticLock(r) &&
           !(checkout <= r.checkin || checkin >= r.checkout)
       );
 

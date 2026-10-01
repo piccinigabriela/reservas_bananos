@@ -191,26 +191,38 @@ export default function App() {
 
   // Guardar reserva (creación o edición)
   const handleSaveReserva = async (reservaData: Partial<Reserva>) => {
-    let updated: Reserva[];
-    const exists = reservaData.id && reservas.some(r => r.id === reservaData.id);
-    if (exists) {
-      // Edición
-      updated = reservas.map(r => (r.id === reservaData.id ? ({ ...r, ...reservaData, icalUid: undefined } as Reserva) : r));
-      showToast('Reserva guardada con éxito ✓');
-    } else {
-      // Creación
-      const newRes: Reserva = {
-        ...reservaData,
-        id: reservaData.id || ('res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4)),
-        icalUid: undefined,
-      } as Reserva;
-      updated = [...reservas, newRes];
-      showToast('Reserva creada con éxito ✓');
-    }
+    const isSyntheticLock = (r: Reserva) =>
+      (r.id.startsWith('ical-') || Boolean(r.icalUid)) &&
+      (!r.precio || r.precio === 0) &&
+      (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
 
+    // Eliminar bloqueos sintéticos que coincidan en cabaña y fechas
+    const baseList = reservas.filter(r => {
+      if (r.id === reservaData.id) return false;
+      if (
+        isSyntheticLock(r) &&
+        r.depto === reservaData.depto &&
+        reservaData.checkin &&
+        reservaData.checkout
+      ) {
+        const overlaps = !(reservaData.checkout <= r.checkin || reservaData.checkin >= r.checkout);
+        if (overlaps) return false; // Descartar el bloqueo automático para dejar lugar a la reserva real
+      }
+      return true;
+    });
+
+    const targetId = reservaData.id || ('res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4));
+    const finalRes: Reserva = {
+      ...reservaData,
+      id: targetId,
+      icalUid: undefined,
+    } as Reserva;
+
+    const updated = [...baseList, finalRes];
     setReservas(updated);
     setIsNewReservaOpen(false);
     setEditingReserva(null);
+    showToast('Reserva guardada con éxito ✓');
     await saveReservas(updated);
   };
 
@@ -234,12 +246,20 @@ export default function App() {
 
   // Convertir bloqueo de iCal en reserva editable
   const handleConvertIcalBlock = (icalBlock: Reserva) => {
+    let cleanGuest = icalBlock.huesped || '';
+    if (cleanGuest.startsWith('🔒')) {
+      cleanGuest = cleanGuest.replace(/^🔒\s*/, '').trim();
+      if (cleanGuest.toLowerCase().includes('bloqueado') || cleanGuest.toLowerCase().includes('not available')) {
+        cleanGuest = '';
+      }
+    }
+
     const convertedRes: Reserva = {
       ...icalBlock,
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
-      huesped: '',
-      precio: 0,
-      notas: `Convertido de bloqueo ${icalBlock.plataforma}`,
+      id: 'res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+      huesped: cleanGuest,
+      precio: icalBlock.precio || 0,
+      notas: icalBlock.notas || `Convertido de bloqueo ${icalBlock.plataforma}`,
       icalUid: undefined,
     };
     setSelectedReserva(null);
