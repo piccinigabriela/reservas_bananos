@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CABANAS, DN, DC, DEFAULT_PINS, getAppPins, saveAppPins, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal, getFechaCorteCfg, getVolunteerNames, saveVolunteerNames } from '../../services/cabinConfig';
 import { Reserva, VolunteerId } from '../../types';
 import { downloadIcsFile } from '../../services/icalExport';
+import { DEFAULT_GCAL_FEED_URL } from '../../services/api';
 import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle, Clock, Users, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface ConfigViewProps {
@@ -51,9 +52,13 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>(() => {
     try {
       const saved = localStorage.getItem('bn_ical');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!parsed.gc_general) parsed.gc_general = DEFAULT_GCAL_FEED_URL;
+        return parsed;
+      }
     } catch (_) {}
-    return {};
+    return { gc_general: DEFAULT_GCAL_FEED_URL };
   });
 
   const [savedStatus, setSavedStatus] = useState<string>('');

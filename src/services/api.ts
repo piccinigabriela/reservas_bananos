@@ -1,5 +1,8 @@
-import { Reserva, Gasto } from '../types';
+import { Reserva, Gasto, CabinCode } from '../types';
 import { SB_URL, SB_KEY, SB_HDR, SB_TABLE, SB_TABLE_G, CABANAS, DN } from './cabinConfig';
+import { detectCabinFromText, cleanGuestName } from './calendarImportParser';
+
+export const DEFAULT_GCAL_FEED_URL = 'https://calendar.google.com/calendar/ical/fercpiccini%40gmail.com/private-540fbe0c8511c3c26df8e140fc8e757b/basic.ics';
 
 // Exact columns present in the Supabase 'reservas_bananos' table
 const DB_COLUMNS = [
@@ -366,8 +369,9 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
     if (urls['gc_' + code]) tasks.push({ code, url: urls['gc_' + code], src: 'google' });
   });
 
-  if (urls['gc_general']) {
-    tasks.push({ code: 'general', url: urls['gc_general'], src: 'google' });
+  const generalUrl = urls['gc_general'] || DEFAULT_GCAL_FEED_URL;
+  if (generalUrl) {
+    tasks.push({ code: 'general', url: generalUrl, src: 'google' });
   }
 
   if (!tasks.length) {
@@ -396,7 +400,18 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
 
       events.forEach(ev => {
         if (ev.co < today) return;
-        const targetCabin = t.code === 'general' ? 'C2' : t.code;
+        
+        let targetCabin: CabinCode = 'C2';
+        let detectedGuestName = ev.summary;
+
+        if (t.code === 'general') {
+          const detected = detectCabinFromText(ev.summary);
+          targetCabin = detected.cabin;
+          detectedGuestName = cleanGuestName(ev.summary) || ev.summary;
+        } else {
+          targetCabin = t.code as CabinCode;
+        }
+
         const conflict = nuevasReservas.find(
           r =>
             r.depto === targetCabin &&
@@ -408,17 +423,24 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
 
         // Only create an automated lock if there is no confirmed/priced reservation occupying those dates
         if (!conflict) {
+          const isGenericBlock =
+            ev.summary.includes('Not available') ||
+            ev.summary.includes('Bloqueado') ||
+            ev.summary.toLowerCase().includes('no disponible');
+
+          const guestDisplay = isGenericBlock
+            ? '🔒 Bloqueado'
+            : (detectedGuestName.startsWith('🔒') ? detectedGuestName : `🔒 ${detectedGuestName}`);
+
+          let plat = t.src === 'booking' ? 'Booking' : t.src === 'airbnb' ? 'Airbnb' : 'Google';
+          if (ev.summary.toLowerCase().includes('airbnb')) plat = 'Airbnb';
+          if (ev.summary.toLowerCase().includes('booking')) plat = 'Booking';
+
           nuevasReservas.push({
             id: 'ical-' + targetCabin + '-' + ev.uid.replace(/[^a-z0-9]/gi, '-').substr(0, 20),
             icalUid: ev.uid,
-            depto: targetCabin as any,
-            huesped:
-              ev.summary.includes('Not available') ||
-              ev.summary.includes('Bloqueado') ||
-              ev.summary.includes('Airbnb') ||
-              ev.summary.includes('Booking')
-                ? '🔒 Bloqueado'
-                : '🔒 ' + ev.summary,
+            depto: targetCabin,
+            huesped: guestDisplay,
             tel: '',
             nac: '',
             checkin: ev.ci,
@@ -426,10 +448,10 @@ export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count
             precio: 0,
             pax: 2,
             plus: 0,
-            plataforma: t.src === 'booking' ? 'Booking' : t.src === 'airbnb' ? 'Airbnb' : 'Google',
+            plataforma: plat as any,
             destino: '',
             estado: 'Confirmada',
-            notas: 'Bloqueo iCal · ' + (t.src === 'google' ? 'Google Calendar' : t.src),
+            notas: `Sincronización Google Calendar · ${ev.summary}`,
             early: false,
             late: false,
             sena: 0,

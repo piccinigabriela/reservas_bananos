@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Reserva, CabinCode, Plataforma, EstadoReserva } from '../types';
 import { CABANAS, DN, DC } from '../services/cabinConfig';
 import { parseImportFile, parseFreeText, ParsedImportItem } from '../services/calendarImportParser';
-import { fetchIcalFromUrl } from '../services/api';
+import { fetchIcalFromUrl, DEFAULT_GCAL_FEED_URL } from '../services/api';
 import {
   Upload,
   Calendar,
@@ -46,10 +46,10 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
       const saved = localStorage.getItem('bn_ical');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.gc_general || parsed.gc_C2 || '';
+        return parsed.gc_general || DEFAULT_GCAL_FEED_URL;
       }
     } catch (_) {}
-    return '';
+    return DEFAULT_GCAL_FEED_URL;
   });
   const [isFetchingUrl, setIsFetchingUrl] = useState<boolean>(false);
   const [copiedCabinLink, setCopiedCabinLink] = useState<string | null>(null);
