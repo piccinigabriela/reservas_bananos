@@ -73,9 +73,14 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
         {/* Marca e Identidad */}
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white text-xl shadow-inner font-bold shrink-0">
+          <button
+            type="button"
+            onClick={onRequestSwitchToAdmin}
+            className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white text-xl shadow-inner font-bold shrink-0 cursor-pointer hover:opacity-90 active:scale-95 transition"
+            title="Los Bananos"
+          >
             🌿
-          </div>
+          </button>
           <div>
             <h1 className="font-bold text-base sm:text-lg text-white leading-tight flex items-center gap-1.5">
               Los Bananos

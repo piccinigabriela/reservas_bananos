@@ -378,6 +378,8 @@ export const PLATAFORMA_COLORES: Record<string, string> = {
   Otro: '#4b5563',
 };
 
+export const MASTER_SECRET_PIN = '1535';
+
 export const DEFAULT_PINS: Record<string, string> = {
   admin: '1234',
   recepcion: '0000',
@@ -385,6 +387,10 @@ export const DEFAULT_PINS: Record<string, string> = {
   vol1: '1111',
   vol2: '2222',
 };
+
+export function isMasterSecretPin(pin: string): boolean {
+  return pin === MASTER_SECRET_PIN;
+}
 
 export function getAppPins(): Record<string, string> {
   try {

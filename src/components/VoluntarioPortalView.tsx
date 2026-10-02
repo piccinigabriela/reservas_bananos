@@ -45,6 +45,7 @@ interface VoluntarioPortalViewProps {
   onToggleTheme: () => void;
   cabinStatuses: Record<CabinCode, CabinStatusInfo>;
   onUpdateCabinStatus: (depto: CabinCode, status: CabinCleaningStatus, updatedBy?: string) => void;
+  onRequestSwitchToAdmin?: () => void;
 }
 
 export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
@@ -57,6 +58,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
   onToggleTheme,
   cabinStatuses,
   onUpdateCabinStatus,
+  onRequestSwitchToAdmin,
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState<string>(today);
@@ -140,9 +142,14 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
       }`}>
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xl font-bold shadow-sm">
+            <button
+              type="button"
+              onClick={onRequestSwitchToAdmin}
+              className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xl font-bold shadow-sm cursor-pointer hover:opacity-90 active:scale-95 transition"
+              title="Los Bananos"
+            >
               {volunteerId === 'vol1' ? '🧑‍🌾' : '👩‍🌾'}
-            </div>
+            </button>
             <div>
               <div className="flex items-center gap-1.5">
                 <h1 className="font-bold text-sm sm:text-base leading-tight">

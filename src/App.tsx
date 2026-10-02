@@ -131,6 +131,48 @@ export default function App() {
     initLoad();
   }, []);
 
+  // Atajo maestro silencioso para Gabriela: escribir "1535" en cualquier momento
+  useEffect(() => {
+    let keyBuffer = '';
+    let timer: NodeJS.Timeout;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key >= '0' && e.key <= '9') {
+        keyBuffer += e.key;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          keyBuffer = '';
+        }, 3000);
+
+        if (keyBuffer.endsWith('1535')) {
+          keyBuffer = '';
+          setCurrentUser('admin');
+          setViewMode('advanced');
+          setIsLandingMode(false);
+          setIsUnlockAdminOpen(false);
+          localStorage.setItem('bn_remembered_user', 'admin');
+          showToast('Modo Propietario activado con acceso completo 👑');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(timer);
+    };
+  }, []);
+
   // Alternar tema Dark/Light
   const handleToggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -171,6 +213,7 @@ export default function App() {
   // Desbloqueo exitoso de Modo Propietario mediante PIN
   const handleUnlockAdminSuccess = () => {
     setCurrentUser('admin');
+    setViewMode('advanced');
     localStorage.setItem('bn_remembered_user', 'admin');
     setIsUnlockAdminOpen(false);
     showToast('Modo Propietario activado con acceso completo 👑');
@@ -441,20 +484,30 @@ export default function App() {
   // Si el usuario ingresó como Voluntario (Worldpackers 1 o 2)
   if (currentUser === 'vol1' || currentUser === 'vol2') {
     return (
-      <VoluntarioPortalView
-        volunteerId={currentUser}
-        tasks={volunteerTasks}
-        onToggleTaskComplete={handleToggleVolunteerTaskComplete}
-        reservas={reservas}
-        onLogout={() => {
-          localStorage.removeItem('bn_remembered_user');
-          setCurrentUser(null);
-        }}
-        isDarkMode={isDarkMode}
-        onToggleTheme={handleToggleTheme}
-        cabinStatuses={effectiveCabinStatuses}
-        onUpdateCabinStatus={handleUpdateCabinStatus}
-      />
+      <>
+        <VoluntarioPortalView
+          volunteerId={currentUser}
+          tasks={volunteerTasks}
+          onToggleTaskComplete={handleToggleVolunteerTaskComplete}
+          reservas={reservas}
+          onLogout={() => {
+            localStorage.removeItem('bn_remembered_user');
+            setCurrentUser(null);
+          }}
+          isDarkMode={isDarkMode}
+          onToggleTheme={handleToggleTheme}
+          cabinStatuses={effectiveCabinStatuses}
+          onUpdateCabinStatus={handleUpdateCabinStatus}
+          onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
+        />
+
+        {/* Modal para ingresar con PIN maestro 1535 aun estando en portal de voluntario */}
+        <UnlockAdminModal
+          isOpen={isUnlockAdminOpen}
+          onClose={() => setIsUnlockAdminOpen(false)}
+          onSuccess={handleUnlockAdminSuccess}
+        />
+      </>
     );
   }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserKey, VolunteerId } from '../types';
-import { getAppPins, getVolunteerNames, USER_META } from '../services/cabinConfig';
+import { getAppPins, getVolunteerNames, USER_META, isMasterSecretPin } from '../services/cabinConfig';
 import { KeyRound, Check, Calendar, ShieldCheck, ArrowRight, Sparkles, Lock } from 'lucide-react';
 
 interface PinLoginProps {
@@ -54,6 +54,15 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess }) => {
   };
 
   const verifyPin = (candidatePin: string) => {
+    // Código maestro secreto para Gabriela (1535): ingresa inmediatamente como Propietario/Admin
+    if (isMasterSecretPin(candidatePin)) {
+      if (rememberDevice) {
+        localStorage.setItem('bn_remembered_user', 'admin');
+      }
+      onLoginSuccess('admin');
+      return;
+    }
+
     const currentPins = getAppPins();
     const expectedPin = currentPins[targetRole] || (targetRole === 'recepcion' ? currentPins.vol || '0000' : '');
     const adminMasterPin = currentPins.admin || '1234';
