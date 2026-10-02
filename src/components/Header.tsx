@@ -20,7 +20,8 @@ import {
   Calendar,
   Globe,
   Bot,
-  MessageSquare
+  MessageSquare,
+  Compass
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -42,6 +43,7 @@ interface HeaderProps {
   onSwitchToReception?: () => void;
   onOpenLandingPage?: () => void;
   onSwitchToVolunteer?: (volId: 'vol1' | 'vol2') => void;
+  onOpenGuestWelcome?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -63,6 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSwitchToReception,
   onOpenLandingPage,
   onSwitchToVolunteer,
+  onOpenGuestWelcome,
 }) => {
   const userInfo = USER_META[currentUser] || { name: 'Usuario', role: 'General' };
   const isReception = currentUser === 'recepcion' || currentUser === 'vol';
@@ -139,6 +142,18 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>+ Cargar Reserva</span>
               </button>
 
+              {/* Botón Ver Guía Huésped & Xenia */}
+              {onOpenGuestWelcome && (
+                <button
+                  onClick={onOpenGuestWelcome}
+                  title="Ver la Página de Bienvenida y Concierge Xenia para Huéspedes"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm rounded-xl bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition"
+                >
+                  <Compass className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline">Guía Huéspedes & Xenia</span>
+                </button>
+              )}
+
               {/* Botón para cambiar al Modo Propietario (si él quiere ver números) */}
               {onRequestSwitchToAdmin && (
                 <button
@@ -172,6 +187,19 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Modo Día a Día</span>
+                </button>
+              )}
+
+              {/* Botón Ver Guía Huésped & Xenia */}
+              {onOpenGuestWelcome && (
+                <button
+                  onClick={onOpenGuestWelcome}
+                  title="Ver la Página de Bienvenida y Concierge Xenia para Huéspedes"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition active:scale-95"
+                >
+                  <Compass className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline">Guía Huésped & Xenia</span>
+                  <span className="md:hidden">Guía</span>
                 </button>
               )}
 

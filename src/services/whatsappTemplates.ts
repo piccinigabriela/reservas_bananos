@@ -13,7 +13,7 @@ export interface WhatsAppTemplate {
 
 export const DEFAULT_WHATSAPP_CONFIG = {
   wifiPass: 'losbananos2026',
-  guiaLink: 'https://losbananosiguazu.com/guia',
+  guiaLink: typeof window !== 'undefined' ? `${window.location.origin}/?bienvenida=1` : 'https://losbananosiguazu.com/?bienvenida=1',
   mapsLink: 'https://maps.app.goo.gl/losbananosiguazu',
   resenaLink: 'https://g.page/r/losbananosiguazu/review',
   codigoDescuento: 'BANANOS10',
@@ -26,15 +26,18 @@ export const WHATSAPP_TEMPLATES: WhatsAppTemplate[] = [
     category: 'anticipada',
     moment: 'Al reservar o días previos al viaje',
     badge: 'Día 1 • Bienvenida',
-    description: 'Bienvenida cálida en plural de cortesía con enlace a la Guía Digital del Huésped para planificar paseos y traslados.',
+    description: 'Bienvenida cálida en plural de cortesía con enlace a la Guía Digital del Huésped y Concierge Xenia 24hs.',
     generateText: (r, customData) => {
       const cfg = { ...DEFAULT_WHATSAPP_CONFIG, ...customData };
       const cabinName = DN[r.depto] || r.depto;
+      const baseGuia = cfg.guiaLink.includes('?') ? cfg.guiaLink : `${cfg.guiaLink}?bienvenida=1`;
+      const personalizedLink = `${baseGuia}&huesped=${encodeURIComponent(r.huesped || '')}&cabana=${r.depto || ''}`;
+
       return (
         `🌴 *¡Hola ${r.huesped}! Les damos la bienvenida a Cabañas Los Bananos en Puerto Iguazú* 🍍\n\n` +
         `Estamos muy felices de recibirles para su estadía del *${formatDateEs(r.checkin)}* al *${formatDateEs(r.checkout)}* en *${cabinName}*.\n\n` +
-        `Para que vayan planificando su viaje y conozcan los mejores paseos, traslados y recomendaciones locales en la selva misionera, les compartimos nuestra *Guía Digital del Huésped*:\n` +
-        `👉 ${cfg.guiaLink}\n\n` +
+        `Para que vayan planificando su viaje, clave de Wi-Fi y recomendaciones locales en la selva, les compartimos nuestra *Página de Bienvenida y Guía Digital* (donde también pueden consultar dudas las 24 horas con nuestra anfitriona virtual Xenia):\n` +
+        `👉 ${personalizedLink}\n\n` +
         `Cualquier duda que tengan con el itinerario o la llegada, nos pueden escribir directamente por acá. ¡Nos vemos muy pronto! 🌿✨`
       );
     },

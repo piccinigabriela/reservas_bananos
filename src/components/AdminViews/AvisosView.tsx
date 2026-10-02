@@ -254,13 +254,28 @@ export const AvisosView: React.FC<AvisosViewProps> = ({ reservas }) => {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowConfigModal(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-white dark:bg-[#1C2430] hover:bg-amber-50 dark:hover:bg-[#253040] text-[#4A3828] dark:text-slate-200 border border-[#D8CEBA] dark:border-[#384455] rounded-xl transition shadow-xs shrink-0"
-        >
-          <Settings className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-          <span>Configurar Wi-Fi & Enlaces</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}/?bienvenida=1`;
+              navigator.clipboard.writeText(url);
+              showToast('¡Enlace de Bienvenida con Xenia copiado al portapapeles! 📱');
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition shadow-xs shrink-0 cursor-pointer"
+            title="Copiar enlace directo de la Página de Bienvenida y Guía Digital con Xenia 24hs"
+          >
+            <Bot className="w-3.5 h-3.5 text-amber-300" />
+            <span>Copiar Enlace Guía con Xenia</span>
+          </button>
+
+          <button
+            onClick={() => setShowConfigModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-white dark:bg-[#1C2430] hover:bg-amber-50 dark:hover:bg-[#253040] text-[#4A3828] dark:text-slate-200 border border-[#D8CEBA] dark:border-[#384455] rounded-xl transition shadow-xs shrink-0 cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span>Configurar Wi-Fi & Enlaces</span>
+          </button>
+        </div>
       </div>
 
       {/* LAYOUT PRINCIPAL DE 2 COLUMNAS (IZQUIERDA: CONTROLES Y PLANTILLAS, DERECHA: SMARTPHONE WHATSAPP) */}

@@ -41,6 +41,7 @@ import { AvisosView } from './components/AdminViews/AvisosView';
 import { ConfigView } from './components/AdminViews/ConfigView';
 import { XeniaMulticanalView } from './components/AdminViews/XeniaMulticanalView';
 import { LandingPageView } from './components/LandingPageView';
+import { GuestWelcomeView } from './components/GuestWelcomeView';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -71,6 +72,12 @@ export default function App() {
 
   // Vista de Huéspedes (Landing Page pública de reservas)
   const [isLandingMode, setIsLandingMode] = useState<boolean>(false);
+
+  // Vista de Bienvenida del Huésped / Guía Digital con Xenia
+  const [isGuestWelcomeOpen, setIsGuestWelcomeOpen] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('bienvenida') || params.has('guia') || params.has('guest');
+  });
 
   // Datos
   const [reservas, setReservas] = useState<Reserva[]>([]);
@@ -159,6 +166,7 @@ export default function App() {
           setCurrentUser('admin');
           setViewMode('advanced');
           setIsLandingMode(false);
+          setIsGuestWelcomeOpen(false);
           setIsUnlockAdminOpen(false);
           localStorage.setItem('bn_remembered_user', 'admin');
           showToast('Modo Propietario activado con acceso completo 👑');
@@ -511,6 +519,18 @@ export default function App() {
     );
   }
 
+  // Si se solicita la Página de Bienvenida y Guía del Huésped (por URL o clic)
+  if (isGuestWelcomeOpen) {
+    return (
+      <GuestWelcomeView
+        onBackToAdmin={() => {
+          setIsGuestWelcomeOpen(false);
+          window.history.replaceState({}, '', window.location.pathname);
+        }}
+      />
+    );
+  }
+
   // Si el usuario eligió abrir la Landing Page pública de Huéspedes
   if (isLandingMode) {
     return (
@@ -552,6 +572,7 @@ export default function App() {
         onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
         onSwitchToReception={handleSwitchToReception}
         onOpenLandingPage={() => setIsLandingMode(true)}
+        onOpenGuestWelcome={() => setIsGuestWelcomeOpen(true)}
         onSwitchToVolunteer={volId => {
           setCurrentUser(volId);
           localStorage.setItem('bn_remembered_user', volId);
