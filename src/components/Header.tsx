@@ -166,17 +166,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>+ Cargar Reserva</span>
               </button>
 
-              {/* Botón Ver Guía Huésped & Xenia */}
-              {onOpenGuestWelcome && (
-                <button
-                  onClick={onOpenGuestWelcome}
-                  title="Ver la Página de Bienvenida y Concierge Xenia para Huéspedes"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm rounded-xl bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition"
-                >
-                  <Compass className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">Guía Huéspedes & Xenia</span>
-                </button>
-              )}
+              {/* Botón Ver Guía Huésped & Xenia en nueva pestaña */}
+              <a
+                href="?bienvenida=true"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Abrir la Página de Bienvenida y Concierge Xenia para Huéspedes en una pestaña nueva"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm rounded-xl bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition"
+              >
+                <Compass className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline">Guía Huéspedes & Xenia ↗</span>
+              </a>
 
               {/* Salir / Cambiar PIN */}
               <button
@@ -203,17 +203,17 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* Botón Ver Guía Huésped & Xenia (Único) */}
-              {onOpenGuestWelcome && (
-                <button
-                  onClick={onOpenGuestWelcome}
-                  title="Ver la Página de Bienvenida y Concierge Xenia para Huéspedes"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-700 font-bold transition active:scale-95 shadow-xs cursor-pointer"
-                >
-                  <Compass className="w-3.5 h-3.5 text-amber-400" />
-                  <span>🌴 Guía del Huésped</span>
-                </button>
-              )}
+              {/* Botón Ver Guía Huésped & Xenia en nueva pestaña */}
+              <a
+                href="?bienvenida=true"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Abrir la Guía del Huésped y Concierge Xenia en una pestaña nueva"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-700 font-bold transition active:scale-95 shadow-xs cursor-pointer"
+              >
+                <Compass className="w-3.5 h-3.5 text-amber-400" />
+                <span>🌴 Guía del Huésped ↗</span>
+              </a>
 
               {/* Botón Google Calendar CSV */}
               <button
