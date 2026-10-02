@@ -452,15 +452,25 @@ POLÍTICA DE INVOCACIÓN DE HERRAMIENTAS:
         parts: [{ text: message }],
       });
 
+      // Helper para evitar que la llamada a Gemini se cuelgue si la red demora
+      const withTimeout = <T>(promise: Promise<T>, ms = 4500): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), ms)),
+        ]);
+      };
+
       // Primer llamado a Gemini
-      let geminiRes = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: formattedContents,
-        config: {
-          systemInstruction,
-          tools: toolsConfig,
-        },
-      });
+      let geminiRes = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: formattedContents,
+          config: {
+            systemInstruction,
+            tools: toolsConfig,
+          },
+        })
+      );
 
       // Si Gemini decide llamar a herramientas (Function Calling)
       let candidate = geminiRes.candidates?.[0];
@@ -509,14 +519,16 @@ POLÍTICA DE INVOCACIÓN DE HERRAMIENTAS:
         });
 
         // Volver a llamar a Gemini para que elabore la respuesta natural al huésped
-        geminiRes = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: formattedContents,
-          config: {
-            systemInstruction,
-            tools: toolsConfig,
-          },
-        });
+        geminiRes = await withTimeout(
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: formattedContents,
+            config: {
+              systemInstruction,
+              tools: toolsConfig,
+            },
+          })
+        );
 
         candidate = geminiRes.candidates?.[0];
         functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall)?.map((p: any) => p.functionCall);

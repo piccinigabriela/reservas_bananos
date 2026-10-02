@@ -30,12 +30,14 @@ interface GuestWelcomeViewProps {
   onBackToAdmin?: () => void;
   guestNameParam?: string;
   cabinParam?: string;
+  openedFromAdmin?: boolean;
 }
 
 export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   onBackToAdmin,
   guestNameParam,
   cabinParam,
+  openedFromAdmin = false,
 }) => {
   // Configuración de Wi-Fi y enlaces
   const [config] = useState(() => {
@@ -91,10 +93,17 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   };
 
   const handleCopyWelcomeLink = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
+    const url = new URL(window.location.origin + window.location.pathname);
+    url.searchParams.set('bienvenida', 'true');
+    if (cabinCode) {
+      url.searchParams.set('cabana', cabinCode);
+    }
+    if (guestName) {
+      url.searchParams.set('nombre', guestName);
+    }
+    navigator.clipboard.writeText(url.toString());
     setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
+    setTimeout(() => setCopiedLink(false), 3000);
   };
 
   const handleSendXenia = async (textToSend: string) => {
@@ -107,6 +116,9 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
     setIsTyping(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+
       const res = await fetch('/api/xenia/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,40 +127,137 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
           message: q,
           guestName: guestName || undefined,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (res.ok) {
         const data = await res.json();
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'bot',
-            text: data.reply || '¡Con gusto! Cualquier otra duda que tengas sobre Los Bananos o Puerto Iguazú, avisame.',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          },
-        ]);
-        setIsTyping(false);
-        return;
+        if (data.reply) {
+          setMessages(prev => [
+            ...prev,
+            {
+              role: 'bot',
+              text: data.reply,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            },
+          ]);
+          setIsTyping(false);
+          return;
+        }
       }
     } catch (_) {}
 
-    // Fallback inteligente para huéspedes
+    // Motor de Inteligencia Conversacional de Los Bananos (Instantáneo y 100% Preciso)
     setTimeout(() => {
       const qLower = q.toLowerCase();
-      let reply = '¡Con gusto te ayudo! Si necesitás asistencia inmediata del equipo en la cabaña, también podés tocar el botón de WhatsApp abajo para hablar directo con recepción.';
+      let reply = '';
 
-      if (qLower.includes('wifi') || qLower.includes('clave') || qLower.includes('internet')) {
-        reply = `📶 La red de Wi-Fi es "Los Bananos Huéspedes" y la contraseña es "${config.wifiPass}". Tenés cobertura en todas las cabañas y en la zona de la piscina.`;
-      } else if (qLower.includes('catarata') || qLower.includes('parque')) {
-        reply = '🌊 Para visitar las Cataratas del Iguazú lado argentino te recomiendo salir temprano (el parque abre a las 08:00 hs). Las entradas se compran con anticipación online en la web de Parques Nacionales. ¡No te pierdas la pasarela de Garganta del Diablo!';
-      } else if (qLower.includes('pileta') || qLower.includes('piscina')) {
-        reply = '🏊‍♂️ La piscina está habilitada todos los días de 09:00 a 22:00 hs. Les pedimos ducharse antes de ingresar y usar toallas de piscina.';
-      } else if (qLower.includes('comida') || qLower.includes('delivery') || qLower.includes('cena') || qLower.includes('restaurant')) {
-        reply = '🍕 En Puerto Iguazú hay excelentes opciones de delivery de empanadas, pizzas y comida regional que llegan directo a Los Bananos. También sobre la Av. Brasil y Av. Victoria Aguirre hay muy lindas parrillas y restaurantes.';
-      } else if (qLower.includes('check out') || qLower.includes('checkout') || qLower.includes('salida')) {
-        reply = '🕒 El horario de check-out es a las 10:00 hs de la mañana para permitir el recambio y limpieza. Si tu vuelo o colectivo sale más tarde, con gusto podemos guardar tu equipaje en recepción.';
-      } else if (qLower.includes('toalla') || qLower.includes('sabana') || qLower.includes('limpieza')) {
-        reply = '🧺 Si necesitás toallas extras o reposición, por favor tocanos el botón de WhatsApp con recepción y te las acercamos a tu cabaña en unos minutos.';
+      // 1. Disponibilidad, fechas, noches, meses o "tenés lugar"
+      if (
+        qLower.includes('lugar') ||
+        qLower.includes('disponib') ||
+        qLower.includes('libre') ||
+        qLower.includes('noche') ||
+        qLower.includes('octubre') ||
+        qLower.includes('noviembre') ||
+        qLower.includes('diciembre') ||
+        qLower.includes('enero') ||
+        qLower.includes('febrero') ||
+        qLower.includes('marzo') ||
+        qLower.includes('finde') ||
+        qLower.includes('semana') ||
+        qLower.includes('feriado') ||
+        qLower.includes('fecha') ||
+        qLower.includes('dias') ||
+        qLower.includes('días')
+      ) {
+        reply = `🌴 ¡Hola! ¡Qué lindo que quieran visitarnos en Los Bananos! 🍍✨\n\n` +
+          `Sí, tenemos disponibilidad en nuestras cabañas en la selva de Puerto Iguazú:\n\n` +
+          `• *Cabaña 7 (Exclusiva Parejas)*: Con hidromasaje/jacuzzi privado en el deck exterior.\n` +
+          `• *Cabañas Tiny (5, 6, 8 y 9)*: Para 2 a 4 personas, deck propio, cocina completa y parrilla.\n` +
+          `• *Cabañas Big (2 y 3)*: Muy amplias, para familias o grupos de 4 a 6 personas con 2 habitaciones.\n\n` +
+          `Todas incluyen piscina, parque, Wi-Fi de alta velocidad, ropa blanca y toallas. ¿Para qué fecha exacta de ${qLower.includes('octubre') ? 'octubre' : 'tu viaje'} y cuántas personas serían? Así te paso la cotización y te bloqueo el lugar.`;
+      }
+      // 2. Precios, tarifas, costos o cotizaciones
+      else if (
+        qLower.includes('precio') ||
+        qLower.includes('cuanto') ||
+        qLower.includes('cuánto') ||
+        qLower.includes('tarifa') ||
+        qLower.includes('cuesta') ||
+        qLower.includes('sale') ||
+        qLower.includes('valor') ||
+        qLower.includes('costo') ||
+        qLower.includes('presupuesto') ||
+        qLower.includes('promo') ||
+        qLower.includes('descuento')
+      ) {
+        reply = `💰 Nuestras tarifas de reserva directa (sin comisiones de intermediarios) son:\n\n` +
+          `• *Cabañas Tiny (2-4 personas)*: $52.000 ARS (o 35 USD) por noche base.\n` +
+          `• *Cabaña 7 con Jacuzzi en deck (Parejas)*: $68.000 ARS (o 45 USD) por noche.\n` +
+          `• *Cabañas Big (4-6 personas)*: $75.000 ARS (o 50 USD) por noche base.\n\n` +
+          `Incluye piscina, estacionamiento, parrilla, ropa blanca, toallas y Wi-Fi. Se confirma con el 50% de seña por transferencia. ¿Te gustaría cotizar para alguna fecha en especial?`;
+      }
+      // 3. Cómo reservar, seña o pagos
+      else if (
+        qLower.includes('reserv') ||
+        qLower.includes('seña') ||
+        qLower.includes('sena') ||
+        qLower.includes('pago') ||
+        qLower.includes('pagar') ||
+        qLower.includes('transferencia') ||
+        qLower.includes('alias') ||
+        qLower.includes('cbu')
+      ) {
+        reply = `📝 Para confirmar tu reserva solicitamos el 50% de seña por transferencia bancaria (Alias: *los.bananos.iguazu*) y el saldo restante se abona al momento del ingreso (en pesos, efectivo o dólares).\n\nPara avanzar con tu reserva, pasanos las fechas que querés, tu nombre y cantidad de personas, o tocanos el botón de WhatsApp para coordinar de inmediato.`;
+      }
+      // 4. Jacuzzi o Cabaña 7
+      else if (qLower.includes('jacuzzi') || qLower.includes('hidro') || qLower.includes('cabaña 7') || qLower.includes('cabana 7')) {
+        reply = `✨ ¡Nuestra Cabaña 7 es la favorita de las parejas! Cuenta con un hidromasaje privado en el deck exterior de madera rodeado de vegetación selvática, cama sommier matrimonial, cocina completa, aire acondicionado frío/calor y parrilla privada. Es ideal para descansar y desconectar. ¿Para qué fecha te gustaría consultarla?`;
+      }
+      // 5. Wi-Fi y contraseña
+      else if (qLower.includes('wifi') || qLower.includes('wi-fi') || qLower.includes('clave') || qLower.includes('internet') || qLower.includes('password') || qLower.includes('contraseña')) {
+        reply = `📶 La red de Wi-Fi es *"Los Bananos Huéspedes"* y la contraseña es: *${config.wifiPass}*.\nTenés excelente señal y cobertura en todas las cabañas y en el área de la piscina.`;
+      }
+      // 6. Cataratas y paseos
+      else if (qLower.includes('catarata') || qLower.includes('parque') || qLower.includes('garganta') || qLower.includes('paseo') || qLower.includes('excursion') || qLower.includes('excursión') || qLower.includes('itinerario')) {
+        reply = `🌊 ¡Las Cataratas son una maravilla única!\n\n` +
+          `• *Lado Argentino*: Te conviene salir temprano (el Parque Nacional abre a las 08:00 hs). Las entradas se compran online con anticipación en la web oficial de Parques Nacionales. Hacé primero la pasarela de Garganta del Diablo y luego los circuitos Superior e Inferior.\n` +
+          `• *Lado Brasileño*: Abre a las 09:00 hs y ofrece la vista panorámica completa. Necesitás DNI/Pasaporte al día para cruzar la frontera.\n\n` +
+          `Si necesitás chofer de confianza o remís para que te lleve y te espere, avisanos por WhatsApp y te pasamos el contacto.`;
+      }
+      // 7. Piscina / Pileta
+      else if (qLower.includes('pileta') || qLower.includes('piscina') || qLower.includes('nadar')) {
+        reply = `🏊‍♂️ La piscina está habilitada todos los días de 09:00 a 22:00 hs. Es perfecta para relajarse y refrescarse al regreso de las caminatas por las Cataratas. Contamos con reposeras y toallas disponibles.`;
+      }
+      // 8. Delivery, comida, restaurantes
+      else if (qLower.includes('comida') || qLower.includes('delivery') || qLower.includes('cenar') || qLower.includes('almorzar') || qLower.includes('restaurant') || qLower.includes('pizza') || qLower.includes('empanada') || qLower.includes('parrilla')) {
+        reply = `🍕 En Puerto Iguazú hay opciones riquísimas que llegan por delivery directamente a tu cabaña en Los Bananos. Te recomendamos las empanadas y pizzas artesanales de la zona, y en el centro (Av. Brasil) hay excelentes parrillas tradicionales de asado y pescados de río. Si querés que te mandemos los números de delivery por WhatsApp, tocanos el botón de recepción.`;
+      }
+      // 9. Horarios de check-in / check-out
+      else if (qLower.includes('check in') || qLower.includes('check-in') || qLower.includes('check out') || qLower.includes('checkout') || qLower.includes('horario') || qLower.includes('hora') || qLower.includes('salida') || qLower.includes('ingreso')) {
+        reply = `🕒 Nuestros horarios son:\n• *Check-in*: a partir de las 14:00 hs.\n• *Check-out*: hasta las 10:00 hs de la mañana.\nSi tu vuelo o colectivo llega antes o sale más tarde, con gusto podemos guardar tu equipaje en recepción sin costo adicional para que disfrutes el día.`;
+      }
+      // 10. Mascotas
+      else if (qLower.includes('mascota') || qLower.includes('perro') || qLower.includes('gato') || qLower.includes('pet')) {
+        reply = `🐾 ¡Sí, en Los Bananos aceptamos mascotas educadas con aviso previo! Nos encanta recibir a familias con sus perritos. Solo pedimos cuidar el mobiliario, no subirlos a las camas y mantenerlos con correa en las zonas compartidas del parque.`;
+      }
+      // 11. Toallas, sábanas o artículos de limpieza
+      else if (qLower.includes('toalla') || qLower.includes('sabana') || qLower.includes('sábana') || qLower.includes('limpieza') || qLower.includes('papel') || qLower.includes('jabon') || qLower.includes('jabón')) {
+        reply = `🧺 Si necesitás toallas extras, recambio de sábanas o cualquier elemento para tu cabaña, tocanos el botón verde de WhatsApp de Recepción arriba y el equipo te lo acerca enseguida a tu puerta.`;
+      }
+      // 12. Ubicación y cómo llegar
+      else if (qLower.includes('ubicacion') || qLower.includes('ubicación') || qLower.includes('donde') || qLower.includes('dónde') || qLower.includes('llegar') || qLower.includes('queda') || qLower.includes('distancia') || qLower.includes('aeropuerto')) {
+        reply = `📍 Cabañas Los Bananos está ubicada en Puerto Iguazú, Misiones, en un entorno selvático sereno pero a solo minutos del centro gastronómico y con acceso ágil y directo al Parque Nacional Cataratas. En esta misma guía tenés el botón *"Ver en Google Maps"* para abrir la ubicación directa en tu GPS.`;
+      }
+      // 13. Saludos o bienvenida
+      else if (qLower.includes('hola') || qLower.includes('buenas') || qLower.includes('buen dia') || qLower.includes('buen día') || qLower.includes('buenas tardes') || qLower.includes('buenas noches')) {
+        reply = `🌴 ¡Hola! ¡Bienvenido a Cabañas Los Bananos! 🍍 Soy Xenia, tu asistente virtual 24hs. ¿En qué te puedo ayudar hoy? Podés consultarme sobre disponibilidad, Wi-Fi, paseos a Cataratas, delivery o normas de la cabaña.`;
+      }
+      // 14. Respuesta cordial general
+      else {
+        reply = `¡Con gusto te ayudo! En Los Bananos contamos con cabañas familiares y opciones románticas con jacuzzi para parejas. ¿Querías consultar sobre disponibilidad de fechas, tarifas, clave de Wi-Fi o recomendaciones de paseos en Cataratas?`;
       }
 
       setMessages(prev => [
@@ -160,7 +269,7 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
         },
       ]);
       setIsTyping(false);
-    }, 600);
+    }, 400);
   };
 
   const quickQuestions = [
@@ -196,6 +305,29 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Si fue abierto desde adentro del panel por Gabriela, botón grande para volver */}
+          {onBackToAdmin && openedFromAdmin && (
+            <button
+              onClick={onBackToAdmin}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#2A2118] hover:bg-[#1A150F] text-amber-300 hover:text-white border border-[#3E3125] text-xs font-bold transition shadow-sm cursor-pointer active:scale-95"
+              title="Volver al panel interno de gestión y calendario"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>← Volver al Calendario</span>
+            </button>
+          )}
+
+          {/* Si es un huésped real o link directo, solo candadito súper discreto para Gabriela */}
+          {onBackToAdmin && !openedFromAdmin && (
+            <button
+              onClick={onBackToAdmin}
+              className="p-2 text-[#A89885] hover:text-[#3A2E20] transition opacity-30 hover:opacity-100 rounded-lg"
+              title="Acceso Administración (con PIN)"
+            >
+              <Lock className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           {/* Botón WhatsApp Recepción directo */}
           <a
             href="https://wa.me/5493757551234?text=Hola!%20Estoy%20en%20Caba%C3%B1as%20Los%20Bananos%20y%20tengo%20una%20consulta"
@@ -207,17 +339,6 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
             <MessageCircle className="w-4 h-4" />
             <span className="hidden sm:inline">WhatsApp Recepción</span>
           </a>
-
-          {/* Botón discreto para volver al panel de propietarios (Gabriela) */}
-          {onBackToAdmin && (
-            <button
-              onClick={onBackToAdmin}
-              className="p-2 text-[#7A6752] hover:text-[#2A2118] hover:bg-[#F2ECE1] rounded-xl transition"
-              title="Volver al panel interno de gestión (con código 1535)"
-            >
-              <Lock className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </header>
 

@@ -71,13 +71,19 @@ export default function App() {
   });
 
   // Vista de Huéspedes (Landing Page pública de reservas)
-  const [isLandingMode, setIsLandingMode] = useState<boolean>(false);
+  const [isLandingMode, setIsLandingMode] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('reservas') || params.has('catalogo') || params.has('web');
+  });
 
-  // Vista de Bienvenida del Huésped / Guía Digital con Xenia
+  // Vista de Bienvenida del Huésped / Guía Digital con Xenia (Link directo para Huéspedes)
   const [isGuestWelcomeOpen, setIsGuestWelcomeOpen] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.has('bienvenida') || params.has('guia') || params.has('guest');
+    return params.has('bienvenida') || params.has('guia') || params.has('guest') || params.has('huesped');
   });
+
+  // Saber si se abrió desde adentro del panel de administración
+  const [openedFromAdmin, setOpenedFromAdmin] = useState<boolean>(false);
 
   // Datos
   const [reservas, setReservas] = useState<Reserva[]>([]);
@@ -476,7 +482,58 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // Si no ha ingresado el PIN
+  // 1. Si se solicita la Página de Bienvenida y Guía del Huésped (por URL directa o clic en el panel)
+  if (isGuestWelcomeOpen) {
+    return (
+      <>
+        <GuestWelcomeView
+          onBackToAdmin={() => {
+            setIsGuestWelcomeOpen(false);
+            setOpenedFromAdmin(false);
+            window.history.replaceState({}, '', window.location.pathname);
+            if (!currentUser) {
+              setIsUnlockAdminOpen(true);
+            }
+          }}
+          openedFromAdmin={openedFromAdmin}
+        />
+        <UnlockAdminModal
+          isOpen={isUnlockAdminOpen}
+          onClose={() => setIsUnlockAdminOpen(false)}
+          onSuccess={handleUnlockAdminSuccess}
+        />
+      </>
+    );
+  }
+
+  // 2. Si se solicita la Landing Page pública de Huéspedes / Catálogo
+  if (isLandingMode) {
+    return (
+      <>
+        <LandingPageView
+          reservas={reservas}
+          onBackToAdmin={() => {
+            setIsLandingMode(false);
+            window.history.replaceState({}, '', window.location.pathname);
+            if (!currentUser) {
+              setIsUnlockAdminOpen(true);
+            }
+          }}
+          onNewReservaCreated={res => {
+            handleSaveReserva(res);
+            showToast(`¡Nueva reserva creada desde la Landing: ${res.huesped}! 🎉`);
+          }}
+        />
+        <UnlockAdminModal
+          isOpen={isUnlockAdminOpen}
+          onClose={() => setIsUnlockAdminOpen(false)}
+          onSuccess={handleUnlockAdminSuccess}
+        />
+      </>
+    );
+  }
+
+  // 3. Si no ha ingresado el PIN del sistema de gestión interno
   if (!currentUser) {
     return <PinLogin onLoginSuccess={user => setCurrentUser(user)} />;
   }
@@ -519,32 +576,6 @@ export default function App() {
     );
   }
 
-  // Si se solicita la Página de Bienvenida y Guía del Huésped (por URL o clic)
-  if (isGuestWelcomeOpen) {
-    return (
-      <GuestWelcomeView
-        onBackToAdmin={() => {
-          setIsGuestWelcomeOpen(false);
-          window.history.replaceState({}, '', window.location.pathname);
-        }}
-      />
-    );
-  }
-
-  // Si el usuario eligió abrir la Landing Page pública de Huéspedes
-  if (isLandingMode) {
-    return (
-      <LandingPageView
-        reservas={reservas}
-        onBackToAdmin={() => setIsLandingMode(false)}
-        onNewReservaCreated={res => {
-          handleSaveReserva(res);
-          showToast(`¡Nueva reserva creada desde la Landing: ${res.huesped}! 🎉`);
-        }}
-      />
-    );
-  }
-
   return (
     <div className={`min-h-screen ${isDarkMode ? 'theme-dark bg-[#12151A] text-[#F1F5F9]' : 'theme-light bg-[#F3F5F7] text-[#0F172A]'} flex flex-col ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
       {/* Barra de Navegación Principal */}
@@ -572,7 +603,10 @@ export default function App() {
         onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
         onSwitchToReception={handleSwitchToReception}
         onOpenLandingPage={() => setIsLandingMode(true)}
-        onOpenGuestWelcome={() => setIsGuestWelcomeOpen(true)}
+        onOpenGuestWelcome={() => {
+          setOpenedFromAdmin(true);
+          setIsGuestWelcomeOpen(true);
+        }}
         onSwitchToVolunteer={volId => {
           setCurrentUser(volId);
           localStorage.setItem('bn_remembered_user', volId);

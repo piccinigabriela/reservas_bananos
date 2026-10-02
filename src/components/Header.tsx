@@ -85,18 +85,30 @@ export const Header: React.FC<HeaderProps> = ({
             🌿
           </button>
           <div>
-            <h1 className="font-bold text-base sm:text-lg text-white leading-tight flex items-center gap-1.5">
+            <h1 className="font-bold text-base sm:text-lg text-white leading-tight flex items-center gap-1.5 flex-wrap">
               Los Bananos
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+              <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 shadow-xs ${
                 isReception 
-                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60' 
-                  : 'bg-blue-950/80 text-blue-400 border border-blue-800/60'
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/80' 
+                  : 'bg-amber-950 text-amber-300 border border-amber-500/80 ring-1 ring-amber-500/30'
               }`}>
-                {isReception ? 'Modo Día a Día' : 'Propietario'}
+                {isReception ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>🟢 Modo Día a Día (Recepción)</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs">👑</span>
+                    <span>Modo Propietario (Ajustes y Finanzas)</span>
+                  </>
+                )}
               </span>
             </h1>
             <p className="text-[11px] text-[#94A3B8]">
-              {userInfo.role}
+              {isReception 
+                ? 'Vista segura y limpia: solo calendario y cargas de reservas' 
+                : 'Acceso total activo: Finanzas, Gastos, Xenia y Configuración'}
             </p>
           </div>
         </div>
@@ -106,6 +118,18 @@ export const Header: React.FC<HeaderProps> = ({
           {/* MODO RECEPCIÓN: Solo lo esencial (Calendario, Botón Carga, Modo Lectura, Tema y Switch) */}
           {isReception ? (
             <>
+              {/* Botón para cambiar al Modo Propietario / Oculto (con PIN 1535) */}
+              {onRequestSwitchToAdmin && (
+                <button
+                  onClick={onRequestSwitchToAdmin}
+                  title="Abrir Modo Propietario para ver finanzas, gastos, xenia y ajustes (PIN 1535)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-xl bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-600/70 font-bold transition shadow-sm cursor-pointer active:scale-95"
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span>👑 Abrir Modo Ajustes / Propietario</span>
+                </button>
+              )}
+
               {/* Selector Modo Oscuro / Claro */}
               <button
                 onClick={onToggleTheme}
@@ -154,18 +178,6 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* Botón para cambiar al Modo Propietario (si él quiere ver números) */}
-              {onRequestSwitchToAdmin && (
-                <button
-                  onClick={onRequestSwitchToAdmin}
-                  title="Cambiar a Modo Propietario para ver finanzas y ajustes"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm rounded-xl bg-[#1A1F26] hover:bg-[#222933] text-blue-400 hover:text-blue-300 border border-[#2D3540] font-semibold transition"
-                >
-                  <ShieldCheck className="w-4 h-4 text-blue-400" />
-                  <span className="hidden sm:inline">Ver Finanzas</span>
-                </button>
-              )}
-
               {/* Salir */}
               <button
                 onClick={onLogout}
@@ -178,15 +190,15 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             /* MODO PROPIETARIO COMPLETO */
             <>
-              {/* Botón Volver al Modo Día a Día con 1 clic */}
+              {/* Botón Volver al Modo Día a Día con 1 solo toque */}
               {onSwitchToReception && (
                 <button
                   onClick={onSwitchToReception}
-                  title="Volver a la vista limpia de Día a Día (solo calendario y reservas)"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-800/70 font-semibold transition active:scale-95"
+                  title="Ocultar finanzas y volver a la vista protegida de Día a Día"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-xl bg-emerald-900/90 hover:bg-emerald-800 text-emerald-200 border border-emerald-500 font-bold transition active:scale-95 shadow-xs cursor-pointer"
                 >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Modo Día a Día</span>
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>🌿 Ocultar y Salir a Modo Día a Día</span>
                 </button>
               )}
 
