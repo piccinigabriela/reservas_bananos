@@ -178,13 +178,14 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* Salir */}
+              {/* Salir / Cambiar PIN */}
               <button
                 onClick={onLogout}
-                title="Cerrar sesión"
-                className="p-2 text-[#94A3B8] hover:text-white hover:bg-[#1A1F26] rounded-xl transition"
+                title="Cerrar sesión y volver a la pantalla de PIN"
+                className="flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm text-slate-300 hover:text-white bg-[#1A1F26] hover:bg-[#222933] border border-[#2D3540] rounded-xl transition cursor-pointer"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4 text-slate-400" />
+                <span className="hidden sm:inline">Salir / PIN</span>
               </button>
             </>
           ) : (
@@ -385,13 +386,14 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>Cargar Reserva</span>
               </button>
 
-              {/* Salir */}
+              {/* Salir / Cambiar PIN */}
               <button
                 onClick={onLogout}
-                title="Bloquear / Cambiar PIN"
-                className="p-2 text-[#94A3B8] hover:text-white hover:bg-[#222933] rounded-lg transition"
+                title="Bloquear / Cambiar PIN de acceso"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm text-slate-300 hover:text-white bg-[#222933] hover:bg-rose-950/40 hover:border-rose-800/50 border border-[#2D3540] rounded-lg transition cursor-pointer"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">Salir / PIN</span>
               </button>
             </>
           )}
