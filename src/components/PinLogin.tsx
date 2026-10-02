@@ -33,33 +33,56 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
     return 'usuario';
   };
 
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    return parseInt(localStorage.getItem('bn_pin_fails') || '0', 10);
+  });
+  const [lockedUntil, setLockedUntil] = useState<number>(() => {
+    return parseInt(localStorage.getItem('bn_pin_lock_until') || '0', 10);
+  });
+  const [nowTime, setNowTime] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isLocked = lockedUntil > nowTime;
+  const remainingSeconds = Math.max(0, Math.ceil((lockedUntil - nowTime) / 1000));
+
   const handleDigit = (digit: string) => {
-    if (pin.length >= 4) return;
+    if (isLocked || pin.length >= 4) return;
     const newPin = pin + digit;
     setPin(newPin);
     setErrorMsg('');
 
     if (newPin.length === 4) {
-      setTimeout(() => verifyPin(newPin), 100);
+      setTimeout(() => verifyPin(newPin), 120);
     }
   };
 
   const handleBackspace = () => {
+    if (isLocked) return;
     setPin(p => p.slice(0, -1));
     setErrorMsg('');
   };
 
   const handleClear = () => {
+    if (isLocked) return;
     setPin('');
     setErrorMsg('');
   };
 
   const verifyPin = (candidatePin: string) => {
+    if (isLocked) return;
+
     // Código maestro secreto para Gabriela (1535): ingresa inmediatamente como Propietario/Admin
     if (isMasterSecretPin(candidatePin)) {
       if (rememberDevice) {
         localStorage.setItem('bn_remembered_user', 'admin');
       }
+      localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
+      setFailedAttempts(0);
       onLoginSuccess('admin');
       return;
     }
@@ -74,9 +97,23 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
       if (rememberDevice) {
         localStorage.setItem('bn_remembered_user', userKey);
       }
+      localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
+      setFailedAttempts(0);
       onLoginSuccess(userKey);
     } else {
-      setErrorMsg(`PIN incorrecto para ${getProfileRoleName()}.`);
+      const nextFails = failedAttempts + 1;
+      setFailedAttempts(nextFails);
+      localStorage.setItem('bn_pin_fails', String(nextFails));
+
+      if (nextFails >= 3) {
+        const until = Date.now() + 5 * 60 * 1000;
+        setLockedUntil(until);
+        localStorage.setItem('bn_pin_lock_until', String(until));
+        setErrorMsg('Sistema bloqueado por 5 minutos tras 3 intentos fallidos.');
+      } else {
+        setErrorMsg(`PIN incorrecto. Intento ${nextFails} de 3.`);
+      }
       setPin('');
     }
   };
@@ -223,87 +260,91 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
           </button>
         </div>
 
-        {/* Sección de Ingreso de PIN de 4 dígitos */}
-        <div className="space-y-4 pt-1">
-          <div className="text-center space-y-1">
-            <span className="text-xs uppercase font-bold text-slate-300 tracking-wider block">
-              Ingresá el PIN de {getProfileRoleName()}
-            </span>
+        {/* Sección de Ingreso de PIN de 4 dígitos o Bloqueo */}
+        {isLocked ? (
+          <div className="p-4 bg-rose-950/60 border border-rose-800 rounded-2xl space-y-2 text-center my-3">
+            <div className="text-rose-400 font-black text-sm flex items-center justify-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-rose-400" />
+              <span>Bloqueo de Seguridad Activado</span>
+            </div>
+            <p className="text-xs text-rose-200">
+              Se registraron 3 intentos fallidos de PIN.
+            </p>
+            <div className="text-xl font-mono font-black text-rose-300">
+              {Math.floor(remainingSeconds / 60)}:{(remainingSeconds % 60).toString().padStart(2, '0')}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 pt-1">
+            <div className="text-center space-y-1">
+              <span className="text-xs uppercase font-bold text-slate-300 tracking-wider block">
+                Ingresá el PIN de {getProfileRoleName()}
+              </span>
 
-            {/* Indicador de 4 puntos */}
-            <div className="flex justify-center gap-3 py-2">
-              {[0, 1, 2, 3].map(idx => (
-                <div
-                  key={idx}
-                  className={`w-4 h-4 rounded-full transition-all duration-150 ${
-                    pin.length > idx
-                      ? targetRole === 'admin'
-                        ? 'bg-amber-400 scale-125 shadow-md shadow-amber-500/50'
-                        : 'bg-emerald-400 scale-125 shadow-md shadow-emerald-500/50'
-                      : 'bg-[#0F1520] border-2 border-[#2D3A4F]'
-                  }`}
-                />
-              ))}
+              {/* Indicador de 4 puntos */}
+              <div className="flex justify-center gap-3 py-2">
+                {[0, 1, 2, 3].map(idx => (
+                  <div
+                    key={idx}
+                    className={`w-4 h-4 rounded-full transition-all duration-150 ${
+                      pin.length > idx
+                        ? targetRole === 'admin'
+                          ? 'bg-amber-400 scale-125 shadow-md shadow-amber-500/50'
+                          : 'bg-emerald-400 scale-125 shadow-md shadow-emerald-500/50'
+                        : 'bg-[#0F1520] border-2 border-[#2D3A4F]'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {errorMsg && (
+                <p className="text-xs font-bold text-rose-400 animate-bounce">
+                  {errorMsg}
+                </p>
+              )}
             </div>
 
-            {errorMsg && (
-              <p className="text-xs font-bold text-rose-400 animate-bounce">
-                {errorMsg}
-              </p>
-            )}
-          </div>
+            {/* Teclado Táctil Numérico */}
+            <div className="grid grid-cols-3 gap-2 max-w-[260px] mx-auto">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleDigit(num)}
+                  className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-emerald-600 border border-[#374760] text-white font-extrabold text-xl shadow-sm transition active:scale-90 flex items-center justify-center cursor-pointer"
+                >
+                  {num}
+                </button>
+              ))}
 
-          {/* Teclado Táctil Numérico */}
-          <div className="grid grid-cols-3 gap-2 max-w-[260px] mx-auto">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
               <button
-                key={num}
                 type="button"
-                onClick={() => handleDigit(num)}
+                onClick={handleClear}
+                className="h-12 rounded-2xl bg-rose-950/50 hover:bg-rose-900/60 active:bg-rose-800 border border-rose-800/50 text-rose-300 font-bold text-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
+                title="Borrar todo"
+              >
+                Borrar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDigit('0')}
                 className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-emerald-600 border border-[#374760] text-white font-extrabold text-xl shadow-sm transition active:scale-90 flex items-center justify-center cursor-pointer"
               >
-                {num}
+                0
               </button>
-            ))}
 
-            <button
-              type="button"
-              onClick={handleClear}
-              className="h-12 rounded-2xl bg-rose-950/50 hover:bg-rose-900/60 active:bg-rose-800 border border-rose-800/50 text-rose-300 font-bold text-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
-              title="Borrar todo"
-            >
-              Borrar
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleDigit('0')}
-              className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-emerald-600 border border-[#374760] text-white font-extrabold text-xl shadow-sm transition active:scale-90 flex items-center justify-center cursor-pointer"
-            >
-              0
-            </button>
-
-            <button
-              type="button"
-              onClick={handleBackspace}
-              className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-slate-600 border border-[#374760] text-slate-300 font-bold text-lg transition active:scale-90 flex items-center justify-center cursor-pointer"
-              title="Borrar último dígito"
-            >
-              ⌫
-            </button>
+              <button
+                type="button"
+                onClick={handleBackspace}
+                className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-slate-600 border border-[#374760] text-slate-300 font-bold text-lg transition active:scale-90 flex items-center justify-center cursor-pointer"
+                title="Borrar último dígito"
+              >
+                ⌫
+              </button>
+            </div>
           </div>
-
-          {/* Atajo rápido / sugerencia de PIN configurado */}
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              onClick={() => verifyPin(defaultPinForRole)}
-              className="text-xs text-slate-400 hover:text-emerald-300 transition underline cursor-pointer"
-            >
-              Autocompletar PIN ({defaultPinForRole})
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Checkbox para no pedirlo siempre en el celular */}
         <div className="pt-2 border-t border-[#263345] space-y-2.5">

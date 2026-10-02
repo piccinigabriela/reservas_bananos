@@ -538,20 +538,13 @@ export default function App() {
     );
   }
 
-  // 3. Si no ha ingresado el PIN del sistema de gestión interno (Seguridad total para Huéspedes)
+  // 3. Si no ha ingresado el PIN del sistema de gestión interno
   if (!currentUser) {
     return (
-      <div className="min-h-screen w-full bg-[#FAF7F2] text-[#2A2118]">
-        <GuestWelcomeView
-          onBackToAdmin={() => setIsUnlockAdminOpen(true)}
-          openedFromAdmin={false}
-        />
-        <UnlockAdminModal
-          isOpen={isUnlockAdminOpen}
-          onClose={() => setIsUnlockAdminOpen(false)}
-          onSuccess={handleUnlockAdminSuccess}
-        />
-      </div>
+      <PinLogin
+        onLoginSuccess={user => setCurrentUser(user)}
+        onOpenGuestGuide={() => setIsGuestWelcomeOpen(true)}
+      />
     );
   }
 
