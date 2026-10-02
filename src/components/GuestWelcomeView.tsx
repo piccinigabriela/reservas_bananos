@@ -43,7 +43,13 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   const [config] = useState(() => {
     try {
       const saved = localStorage.getItem('bn_whatsapp_config');
-      if (saved) return { ...DEFAULT_WHATSAPP_CONFIG, ...JSON.parse(saved) };
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.mapsLink && parsed.mapsLink.includes('maps.app.goo.gl/losbananosiguazu')) {
+          parsed.mapsLink = DEFAULT_WHATSAPP_CONFIG.mapsLink;
+        }
+        return { ...DEFAULT_WHATSAPP_CONFIG, ...parsed };
+      }
     } catch (_) {}
     return DEFAULT_WHATSAPP_CONFIG;
   });
