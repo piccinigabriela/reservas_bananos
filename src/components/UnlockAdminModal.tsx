@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DEFAULT_PINS, isMasterSecretPin } from '../services/cabinConfig';
 import { ShieldCheck, X, Check, Lock } from 'lucide-react';
 
@@ -15,8 +15,23 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
 }) => {
   const [pin, setPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    return parseInt(localStorage.getItem('bn_pin_fails') || '0', 10);
+  });
+  const [lockedUntil, setLockedUntil] = useState<number>(() => {
+    return parseInt(localStorage.getItem('bn_pin_lock_until') || '0', 10);
+  });
+  const [nowTime, setNowTime] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   if (!isOpen) return null;
+
+  const isLocked = lockedUntil > nowTime;
+  const remainingSeconds = Math.max(0, Math.ceil((lockedUntil - nowTime) / 1000));
 
   const getSavedPins = () => {
     try {
@@ -27,12 +42,17 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
   };
 
   const verifyPin = (candidatePin: string) => {
+    if (isLocked) return;
+
     const pins = getSavedPins();
     
     // 1. Maestro o Propietario (1982 por defecto)
     if (isMasterSecretPin(candidatePin) || candidatePin === pins.admin) {
       setPin('');
       setErrorMsg('');
+      localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
+      setFailedAttempts(0);
       onSuccess('owner');
       return;
     }
@@ -41,6 +61,9 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
     if (candidatePin === pins.recepcion) {
       setPin('');
       setErrorMsg('');
+      localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
+      setFailedAttempts(0);
       onSuccess('recepcion');
       return;
     }
@@ -49,16 +72,31 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
     if (candidatePin === pins.voluntario) {
       setPin('');
       setErrorMsg('');
+      localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
+      setFailedAttempts(0);
       onSuccess('vol1');
       return;
     }
 
-    setErrorMsg('PIN no válido. Verificá los 4 dígitos.');
+    const nextFails = failedAttempts + 1;
+    setFailedAttempts(nextFails);
+    localStorage.setItem('bn_pin_fails', String(nextFails));
+
+    if (nextFails >= 3) {
+      const lockDurationMs = 5 * 60 * 1000; // 5 minutos de bloqueo
+      const until = Date.now() + lockDurationMs;
+      setLockedUntil(until);
+      localStorage.setItem('bn_pin_lock_until', String(until));
+      setErrorMsg(`Sistema bloqueado temporalmente por seguridad. Esperá 5 minutos.`);
+    } else {
+      setErrorMsg(`PIN no válido. Intento ${nextFails} de 3 antes del bloqueo temporal.`);
+    }
     setPin('');
   };
 
   const handleDigit = (digit: string) => {
-    if (pin.length >= 4) return;
+    if (isLocked || pin.length >= 4) return;
     const next = pin + digit;
     setPin(next);
     setErrorMsg('');
@@ -68,11 +106,13 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
   };
 
   const handleBackspace = () => {
+    if (isLocked) return;
     setPin(p => p.slice(0, -1));
     setErrorMsg('');
   };
 
   const handleClear = () => {
+    if (isLocked) return;
     setPin('');
     setErrorMsg('');
   };
@@ -90,7 +130,7 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+            className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -99,6 +139,22 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
         <p className="text-xs text-slate-400 text-left leading-relaxed">
           Ingresá tu PIN de propietario para ver balances, gráficos de rendimiento, gastos y configuración.
         </p>
+
+        {isLocked ? (
+          <div className="p-4 bg-rose-950/60 border border-rose-800 rounded-2xl space-y-2">
+            <div className="text-rose-400 font-black text-sm flex items-center justify-center gap-2">
+              <Lock className="w-4 h-4" />
+              <span>Bloqueo de Seguridad Activado</span>
+            </div>
+            <p className="text-xs text-rose-200">
+              Se registraron 3 intentos fallidos consecutivos.
+            </p>
+            <div className="text-lg font-mono font-black text-rose-300">
+              {Math.floor(remainingSeconds / 60)}:{(remainingSeconds % 60).toString().padStart(2, '0')}
+            </div>
+          </div>
+        ) : (
+          <>
 
         {/* Indicador de 4 dígitos */}
         <div className="space-y-2">
@@ -148,30 +204,24 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
             0
           </button>
 
-          <button
-            onClick={handleBackspace}
-            className="h-11 rounded-xl bg-[#222933] hover:bg-[#2D3540] border border-[#2D3540] text-slate-400 font-bold text-base transition active:scale-95 flex items-center justify-center cursor-pointer"
-          >
-            ⌫
-          </button>
-        </div>
+              <button
+                onClick={handleBackspace}
+                className="h-11 rounded-xl bg-[#222933] hover:bg-[#2D3540] border border-[#2D3540] text-slate-400 font-bold text-base transition active:scale-95 flex items-center justify-center cursor-pointer"
+              >
+                ⌫
+              </button>
+            </div>
 
-        {/* Acceso de prueba / Atajo */}
-        <div className="pt-2 border-t border-[#2D3540] flex justify-between items-center text-xs">
-          <button
-            onClick={() => verifyPin('1234')}
-            className="text-blue-400 hover:underline font-semibold"
-          >
-            Acceso Rápido (1234)
-          </button>
-
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white"
-          >
-            Cancelar
-          </button>
-        </div>
+            <div className="pt-2 border-t border-[#2D3540] flex justify-end items-center text-xs">
+              <button
+                onClick={onClose}
+                className="text-slate-400 hover:text-white cursor-pointer px-3 py-1 rounded-lg"
+              >
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

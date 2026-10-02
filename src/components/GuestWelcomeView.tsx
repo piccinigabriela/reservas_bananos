@@ -52,6 +52,28 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   const [copiedWifi, setCopiedWifi] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Contador de toques secretos en el logo de la palmera (para acceso invisible de Gabriela)
+  const [logoTapCount, setLogoTapCount] = useState<number>(0);
+  const lastTapRef = useRef<number>(0);
+
+  const handleLogoSecretTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current > 2000) {
+      // Si pasaron más de 2 segundos desde el último toque, reiniciar cuenta
+      setLogoTapCount(1);
+    } else {
+      const next = logoTapCount + 1;
+      setLogoTapCount(next);
+      if (next >= 5) {
+        setLogoTapCount(0);
+        if (onBackToAdmin) {
+          onBackToAdmin();
+        }
+      }
+    }
+    lastTapRef.current = now;
+  };
+
   // Parámetros de URL si vienen
   const [guestName, setGuestName] = useState<string>(() => {
     if (guestNameParam) return guestNameParam;
@@ -314,10 +336,14 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
 
   return (
     <div className="min-h-screen w-full bg-[#FAF7F2] text-[#2A2118] font-sans pb-16 selection:bg-emerald-500 selection:text-white relative z-50">
-      {/* Barra Superior con Logo y Acceso Administrativo */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#EAE0D2] px-4 sm:px-6 py-3 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-md font-bold">
+      {/* Barra Superior con Logo y Acceso Huésped */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#EAE0D2] px-4 sm:px-6 py-3 shadow-sm flex items-center justify-between select-none">
+        <div 
+          onClick={handleLogoSecretTap}
+          className="flex items-center gap-2.5 cursor-pointer"
+          title="Cabañas Los Bananos"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-md font-bold transition active:scale-90">
             🌴
           </div>
           <div>
@@ -334,7 +360,7 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Si fue abierto desde adentro del panel por Gabriela, botón destacado para volver */}
+          {/* Si fue abierto desde adentro del panel por Gabriela, botón para volver al calendario */}
           {onBackToAdmin && openedFromAdmin && (
             <button
               onClick={onBackToAdmin}
@@ -343,17 +369,6 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
             >
               <Calendar className="w-4 h-4 text-amber-300" />
               <span>← Volver al Calendario</span>
-            </button>
-          )}
-
-          {/* Si es un huésped real o link directo, candadito súper discreto para Gabriela */}
-          {onBackToAdmin && !openedFromAdmin && (
-            <button
-              onClick={onBackToAdmin}
-              className="p-2 text-[#A89885] hover:text-[#3A2E20] transition opacity-30 hover:opacity-100 rounded-lg cursor-pointer"
-              title="Acceso Administración (con PIN)"
-            >
-              <Lock className="w-4 h-4" />
             </button>
           )}
 
