@@ -349,15 +349,15 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </button>
 
-              {/* Botón rápido: Landing Huéspedes */}
-              {onOpenLandingPage && (
+              {/* Botón rápido: Guía Huéspedes */}
+              {onOpenGuestWelcome && (
                 <button
-                  onClick={onOpenLandingPage}
-                  title="Abrir vista de huéspedes (Landing Page de Cabañas Los Bananos)"
-                  className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#161D27] hover:bg-[#202936] text-emerald-300 border border-emerald-700/40 transition"
+                  onClick={onOpenGuestWelcome}
+                  title="Abrir la Guía de Bienvenida del Huésped y Concierge Xenia"
+                  className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition"
                 >
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>Landing Huéspedes</span>
+                  <Compass className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Guía Huéspedes</span>
                 </button>
               )}
 

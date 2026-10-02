@@ -284,9 +284,9 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   const cabinDisplayName = cabinCode && DN[cabinCode as keyof typeof DN] ? DN[cabinCode as keyof typeof DN] : null;
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#2A2118] font-sans pb-16 selection:bg-emerald-500 selection:text-white">
-      {/* Barra Superior con Logo y Acceso Administrativo discreto */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-[#EAE0D2] px-4 sm:px-6 py-3 shadow-xs flex items-center justify-between">
+    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#2A2118] font-sans pb-16 selection:bg-emerald-500 selection:text-white relative z-50">
+      {/* Barra Superior con Logo y Acceso Administrativo */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#EAE0D2] px-4 sm:px-6 py-3 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-md font-bold">
             🌴
@@ -305,26 +305,26 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Si fue abierto desde adentro del panel por Gabriela, botón grande para volver */}
+          {/* Si fue abierto desde adentro del panel por Gabriela, botón destacado para volver */}
           {onBackToAdmin && openedFromAdmin && (
             <button
               onClick={onBackToAdmin}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#2A2118] hover:bg-[#1A150F] text-amber-300 hover:text-white border border-[#3E3125] text-xs font-bold transition shadow-sm cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white border border-emerald-600 text-xs font-bold transition shadow-md cursor-pointer active:scale-95"
               title="Volver al panel interno de gestión y calendario"
             >
-              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <Calendar className="w-4 h-4 text-amber-300" />
               <span>← Volver al Calendario</span>
             </button>
           )}
 
-          {/* Si es un huésped real o link directo, solo candadito súper discreto para Gabriela */}
+          {/* Si es un huésped real o link directo, candadito súper discreto para Gabriela */}
           {onBackToAdmin && !openedFromAdmin && (
             <button
               onClick={onBackToAdmin}
-              className="p-2 text-[#A89885] hover:text-[#3A2E20] transition opacity-30 hover:opacity-100 rounded-lg"
+              className="p-2 text-[#A89885] hover:text-[#3A2E20] transition opacity-30 hover:opacity-100 rounded-lg cursor-pointer"
               title="Acceso Administración (con PIN)"
             >
-              <Lock className="w-3.5 h-3.5" />
+              <Lock className="w-4 h-4" />
             </button>
           )}
 
@@ -333,7 +333,7 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
             href="https://wa.me/5493757551234?text=Hola!%20Estoy%20en%20Caba%C3%B1as%20Los%20Bananos%20y%20tengo%20una%20consulta"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm"
             title="Escribir a Recepción por WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />
