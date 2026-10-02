@@ -198,7 +198,7 @@ export default function App() {
           keyBuffer = '';
         }, 3000);
 
-        if (keyBuffer.endsWith('1535')) {
+        if (keyBuffer.endsWith('1535') || keyBuffer.endsWith('1982')) {
           keyBuffer = '';
           setCurrentUser('admin');
           setViewMode('advanced');
@@ -207,6 +207,15 @@ export default function App() {
           setIsUnlockAdminOpen(false);
           localStorage.setItem('bn_remembered_user', 'admin');
           showToast('Modo Propietario activado con acceso completo 👑');
+        } else if (keyBuffer.endsWith('0000')) {
+          keyBuffer = '';
+          setCurrentUser('recepcion');
+          setCurrentTab('calendario');
+          setIsLandingMode(false);
+          setIsGuestWelcomeOpen(false);
+          setIsUnlockAdminOpen(false);
+          localStorage.setItem('bn_remembered_user', 'recepcion');
+          showToast('Modo Día a Día (Recepción) activado 🌿');
         }
       }
     };
@@ -518,18 +527,21 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // 1. Si el usuario NO está autenticado (o entra un huésped por URL directa)
-  // Mostramos SIEMPRE la Guía / Bienvenida de Huéspedes de forma segura (sin selector de PINs a la vista)
-  if (!currentUser || isGuestWelcomeOpen) {
+  // 1. Si se solicita la Página de Bienvenida y Guía del Huésped (?guia, ?bienvenida, etc.)
+  if (isGuestWelcomeOpen) {
     return (
       <>
         <GuestWelcomeView
           onBackToAdmin={() => {
-            setIsUnlockAdminOpen(true);
+            setIsGuestWelcomeOpen(false);
+            setOpenedFromAdmin(false);
+            window.history.replaceState({}, '', window.location.pathname);
+            if (!currentUser) {
+              setIsUnlockAdminOpen(true);
+            }
           }}
           openedFromAdmin={openedFromAdmin}
         />
-        {/* Modal seguro de ingreso de PIN para Propietario / Recepción */}
         <UnlockAdminModal
           isOpen={isUnlockAdminOpen}
           onClose={() => setIsUnlockAdminOpen(false)}
@@ -563,6 +575,16 @@ export default function App() {
           onSuccess={handleUnlockAdminSuccess}
         />
       </>
+    );
+  }
+
+  // 3. Si no ha ingresado el PIN del sistema de gestión interno
+  if (!currentUser) {
+    return (
+      <PinLogin
+        onLoginSuccess={user => setCurrentUser(user)}
+        onOpenGuestGuide={() => setIsGuestWelcomeOpen(true)}
+      />
     );
   }
 

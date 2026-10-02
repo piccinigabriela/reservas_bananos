@@ -58,19 +58,18 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   const [copiedWifi, setCopiedWifi] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Contador de toques secretos en el logo de la palmera (para acceso invisible de Gabriela)
+  // Acceso discreto para Gabriela / Recepción al tocar el logo
   const [logoTapCount, setLogoTapCount] = useState<number>(0);
   const lastTapRef = useRef<number>(0);
 
   const handleLogoSecretTap = () => {
     const now = Date.now();
-    if (now - lastTapRef.current > 2000) {
-      // Si pasaron más de 2 segundos desde el último toque, reiniciar cuenta
+    if (now - lastTapRef.current > 2500) {
       setLogoTapCount(1);
     } else {
       const next = logoTapCount + 1;
       setLogoTapCount(next);
-      if (next >= 5) {
+      if (next >= 3) {
         setLogoTapCount(0);
         if (onBackToAdmin) {
           onBackToAdmin();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserKey } from '../types';
-import { getAppPins, getVolunteerNames, isMasterSecretPin } from '../services/cabinConfig';
-import { Calendar, ShieldCheck, Compass, Check, KeyRound } from 'lucide-react';
+import { getAppPins, isMasterSecretPin } from '../services/cabinConfig';
+import { ShieldCheck, Compass, Lock } from 'lucide-react';
 
 interface PinLoginProps {
   onLoginSuccess: (user: UserKey) => void;
@@ -9,29 +9,9 @@ interface PinLoginProps {
 }
 
 export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestGuide }) => {
-  const [targetRole, setTargetRole] = useState<'recepcion' | 'admin' | 'vol1' | 'vol2'>('recepcion');
   const [pin, setPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [rememberDevice, setRememberDevice] = useState<boolean>(true);
-  
-  const volNames = getVolunteerNames();
-  const pins = getAppPins();
-
-  const getProfileTitle = () => {
-    if (targetRole === 'recepcion') return 'Día a Día (Recepción)';
-    if (targetRole === 'admin') return 'Propietario / Administración';
-    if (targetRole === 'vol1') return volNames.vol1 || 'Voluntario 1';
-    if (targetRole === 'vol2') return volNames.vol2 || 'Voluntario 2';
-    return 'Usuario';
-  };
-
-  const getProfileRoleName = () => {
-    if (targetRole === 'recepcion') return 'recepción';
-    if (targetRole === 'admin') return 'propietario';
-    if (targetRole === 'vol1') return volNames.vol1?.split('(')[0]?.trim() || 'Voluntario 1';
-    if (targetRole === 'vol2') return volNames.vol2?.split('(')[0]?.trim() || 'Voluntario 2';
-    return 'usuario';
-  };
 
   const [failedAttempts, setFailedAttempts] = useState<number>(() => {
     return parseInt(localStorage.getItem('bn_pin_fails') || '0', 10);
@@ -56,7 +36,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
     setErrorMsg('');
 
     if (newPin.length === 4) {
-      setTimeout(() => verifyPin(newPin), 120);
+      setTimeout(() => verifyPin(newPin), 100);
     }
   };
 
@@ -75,59 +55,57 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
   const verifyPin = (candidatePin: string) => {
     if (isLocked) return;
 
-    // Códigos maestros de Gabriela: 1535, 1982, 2026, 1234
-    if (isMasterSecretPin(candidatePin) || candidatePin === '1982' || candidatePin === '2026' || candidatePin === '1234' || candidatePin === '1535') {
-      const userKey: UserKey = targetRole === 'vol1' || targetRole === 'vol2' ? targetRole : (targetRole === 'recepcion' ? 'recepcion' : 'admin');
-      if (rememberDevice) {
-        localStorage.setItem('bn_remembered_user', userKey);
-      }
-      localStorage.removeItem('bn_pin_fails');
-      localStorage.removeItem('bn_pin_lock_until');
-      setFailedAttempts(0);
-      onLoginSuccess(userKey);
-      return;
-    }
-
     const currentPins = getAppPins();
-    const expectedPin = currentPins[targetRole] || (targetRole === 'recepcion' ? currentPins.vol || '0000' : '');
-    const adminMasterPin = currentPins.admin || '1982';
 
-    // Admite el PIN específico del usuario o el PIN maestro de Propietario
-    if (candidatePin === expectedPin || candidatePin === adminMasterPin || (targetRole === 'recepcion' && candidatePin === '0000')) {
-      const userKey = targetRole as UserKey;
+    // 1. Propietario / Gabriela (1982 o 1535)
+    if (isMasterSecretPin(candidatePin) || candidatePin === currentPins.admin || candidatePin === '1982' || candidatePin === '1535') {
       if (rememberDevice) {
-        localStorage.setItem('bn_remembered_user', userKey);
+        localStorage.setItem('bn_remembered_user', 'admin');
       }
       localStorage.removeItem('bn_pin_fails');
       localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
-      onLoginSuccess(userKey);
+      onLoginSuccess('admin');
       return;
     }
 
-    // Auto-detectar si el PIN ingresado pertenece a otro rol (ej: ingresó 0000 estando seleccionado Propietario o viceversa)
-    if (candidatePin === (currentPins.recepcion || '0000')) {
-      if (rememberDevice) localStorage.setItem('bn_remembered_user', 'recepcion');
+    // 2. Recepción / Día a Día (0000)
+    if (candidatePin === (currentPins.recepcion || '0000') || candidatePin === '0000') {
+      if (rememberDevice) {
+        localStorage.setItem('bn_remembered_user', 'recepcion');
+      }
       localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
       onLoginSuccess('recepcion');
       return;
     }
-    if (candidatePin === (currentPins.vol1 || '1111')) {
-      if (rememberDevice) localStorage.setItem('bn_remembered_user', 'vol1');
+
+    // 3. Voluntario 1 (1111)
+    if (candidatePin === (currentPins.vol1 || '1111') || candidatePin === '1111') {
+      if (rememberDevice) {
+        localStorage.setItem('bn_remembered_user', 'vol1');
+      }
       localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
       onLoginSuccess('vol1');
       return;
     }
-    if (candidatePin === (currentPins.vol2 || '2222')) {
-      if (rememberDevice) localStorage.setItem('bn_remembered_user', 'vol2');
+
+    // 4. Voluntario 2 (2222)
+    if (candidatePin === (currentPins.vol2 || '2222') || candidatePin === '2222') {
+      if (rememberDevice) {
+        localStorage.setItem('bn_remembered_user', 'vol2');
+      }
       localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
       onLoginSuccess('vol2');
       return;
     }
 
+    // PIN incorrecto
     const nextFails = failedAttempts + 1;
     setFailedAttempts(nextFails);
     localStorage.setItem('bn_pin_fails', String(nextFails));
@@ -143,7 +121,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
     setPin('');
   };
 
-  // Soporte de teclado físico (números 0-9 y backspace)
+  // Soporte de teclado físico
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key >= '0' && e.key <= '9') {
@@ -157,25 +135,17 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pin, targetRole]);
-
-  const defaultPinForRole = targetRole === 'admin' 
-    ? '1234' 
-    : targetRole === 'recepcion' 
-      ? '0000' 
-      : targetRole === 'vol1' 
-        ? (pins.vol1 || '1111') 
-        : (pins.vol2 || '2222');
+  }, [pin, isLocked]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FDFBF7] via-[#F5EFE6] to-[#EBE2D3] text-[#2A2118] flex flex-col items-center justify-center p-4 selection:bg-emerald-600 selection:text-white relative">
-      {/* Resplandor decorativo de fondo */}
+    <div className="min-h-screen bg-gradient-to-br from-[#FAF7F2] via-[#F3EBE0] to-[#EAE0D2] text-[#2A2118] flex flex-col items-center justify-center p-4 selection:bg-emerald-600 selection:text-white relative">
+      {/* Resplandor cálido de fondo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center">
         <div className="w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-3xl" />
         <div className="w-[350px] h-[350px] bg-amber-500/10 rounded-full blur-3xl -mt-40 ml-40" />
       </div>
 
-      <div className="relative bg-white/95 backdrop-blur-md text-[#2A2118] border border-[#EAE0D2] rounded-3xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl space-y-5">
+      <div className="relative bg-white/95 backdrop-blur-md text-[#2A2118] border border-[#EAE0D2] rounded-3xl p-6 sm:p-8 w-full max-w-sm shadow-2xl space-y-5">
         
         {/* Logo e Identidad */}
         <div className="text-center space-y-1.5">
@@ -186,110 +156,15 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
             Cabañas Los Bananos
           </h1>
           <p className="text-xs text-[#7A6752] font-medium">
-            Puerto Iguazú · Seleccioná tu perfil para ingresar
+            Sistema de Gestión y Reservas
           </p>
-        </div>
-
-        {/* Selector de Perfil (4 opciones claras) */}
-        <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#FAF5EE] border border-[#EAE0D2] rounded-2xl">
-          {/* Recepción */}
-          <button
-            type="button"
-            onClick={() => {
-              setTargetRole('recepcion');
-              setPin('');
-              setErrorMsg('');
-            }}
-            className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
-              targetRole === 'recepcion'
-                ? 'bg-emerald-50 border-2 border-emerald-600 text-emerald-950 shadow-sm ring-2 ring-emerald-500/20'
-                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <Calendar className="w-4 h-4 text-emerald-700" />
-              {targetRole === 'recepcion' && <Check className="w-4 h-4 text-emerald-700" />}
-            </div>
-            <span className="font-extrabold text-xs block text-[#2A2118]">Día a Día</span>
-            <span className="text-[10px] text-emerald-700 font-semibold leading-tight">Recepción</span>
-          </button>
-
-          {/* Propietario */}
-          <button
-            type="button"
-            onClick={() => {
-              setTargetRole('admin');
-              setPin('');
-              setErrorMsg('');
-            }}
-            className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
-              targetRole === 'admin'
-                ? 'bg-amber-50 border-2 border-amber-600 text-amber-950 shadow-sm ring-2 ring-amber-500/20'
-                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <ShieldCheck className="w-4 h-4 text-amber-700" />
-              {targetRole === 'admin' && <Check className="w-4 h-4 text-amber-700" />}
-            </div>
-            <span className="font-extrabold text-xs block text-[#2A2118]">Propietario</span>
-            <span className="text-[10px] text-amber-800 font-semibold leading-tight">Administración</span>
-          </button>
-
-          {/* Voluntario 1 */}
-          <button
-            type="button"
-            onClick={() => {
-              setTargetRole('vol1');
-              setPin('');
-              setErrorMsg('');
-            }}
-            className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
-              targetRole === 'vol1'
-                ? 'bg-cyan-50 border-2 border-cyan-600 text-cyan-950 shadow-sm ring-2 ring-cyan-500/20'
-                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-base">🧑‍🌾</span>
-              {targetRole === 'vol1' && <Check className="w-4 h-4 text-cyan-700" />}
-            </div>
-            <span className="font-extrabold text-xs block truncate text-[#2A2118]">
-              {volNames.vol1?.split('(')[0]?.trim() || 'Voluntario 1'}
-            </span>
-            <span className="text-[10px] text-cyan-800 font-semibold leading-tight">Worldpackers</span>
-          </button>
-
-          {/* Voluntario 2 */}
-          <button
-            type="button"
-            onClick={() => {
-              setTargetRole('vol2');
-              setPin('');
-              setErrorMsg('');
-            }}
-            className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
-              targetRole === 'vol2'
-                ? 'bg-purple-50 border-2 border-purple-600 text-purple-950 shadow-sm ring-2 ring-purple-500/20'
-                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-base">👩‍🌾</span>
-              {targetRole === 'vol2' && <Check className="w-4 h-4 text-purple-700" />}
-            </div>
-            <span className="font-extrabold text-xs block truncate text-[#2A2118]">
-              {volNames.vol2?.split('(')[0]?.trim() || 'Voluntario 2'}
-            </span>
-            <span className="text-[10px] text-purple-800 font-semibold leading-tight">Worldpackers</span>
-          </button>
         </div>
 
         {/* Sección de Ingreso de PIN de 4 dígitos o Bloqueo */}
         {isLocked ? (
           <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl space-y-2 text-center my-3">
             <div className="text-rose-700 font-black text-sm flex items-center justify-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-rose-600" />
+              <Lock className="w-5 h-5 text-rose-600" />
               <span>Bloqueo de Seguridad Activado</span>
             </div>
             <p className="text-xs text-rose-800">
@@ -302,8 +177,8 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
         ) : (
           <div className="space-y-4 pt-1">
             <div className="text-center space-y-1">
-              <span className="text-xs uppercase font-extrabold text-[#7A6752] tracking-wider block">
-                Ingresá el PIN de {getProfileRoleName()}
+              <span className="text-xs font-bold text-[#7A6752] block">
+                Ingresá tu PIN de 4 dígitos para acceder
               </span>
 
               {/* Indicador de 4 puntos */}
@@ -313,9 +188,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
                     key={idx}
                     className={`w-4 h-4 rounded-full transition-all duration-150 ${
                       pin.length > idx
-                        ? targetRole === 'admin'
-                          ? 'bg-amber-500 scale-125 shadow-md ring-2 ring-amber-300'
-                          : 'bg-emerald-600 scale-125 shadow-md ring-2 ring-emerald-300'
+                        ? 'bg-emerald-600 scale-125 shadow-md ring-2 ring-emerald-300'
                         : 'bg-[#FAF5EE] border-2 border-[#D4C3AE]'
                     }`}
                   />
@@ -336,7 +209,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
                   key={num}
                   type="button"
                   onClick={() => handleDigit(num)}
-                  className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-extrabold text-xl shadow-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
+                  className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-extrabold text-xl shadow-2xs transition active:scale-90 flex items-center justify-center cursor-pointer"
                 >
                   {num}
                 </button>
@@ -354,7 +227,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
               <button
                 type="button"
                 onClick={() => handleDigit('0')}
-                className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-extrabold text-xl shadow-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
+                className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-extrabold text-xl shadow-2xs transition active:scale-90 flex items-center justify-center cursor-pointer"
               >
                 0
               </button>
@@ -371,7 +244,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
           </div>
         )}
 
-        {/* Checkbox para no pedirlo siempre en el celular */}
+        {/* Checkbox para recordar en el dispositivo */}
         <div className="pt-2 border-t border-[#EAE0D2] space-y-2.5">
           <label className="flex items-center justify-center gap-2 text-xs text-[#5A4838] cursor-pointer">
             <input
@@ -380,20 +253,22 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
               onChange={e => setRememberDevice(e.target.checked)}
               className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
             />
-            <span className="font-medium">Recordar este usuario en este dispositivo</span>
+            <span className="font-medium">Recordar sesión en este dispositivo</span>
           </label>
 
           {/* Enlace directo a Guía del Huésped */}
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={onOpenGuestGuide}
-              className="inline-flex items-center gap-1.5 text-xs text-emerald-800 hover:text-emerald-950 transition font-bold cursor-pointer"
-            >
-              <Compass className="w-3.5 h-3.5 text-emerald-600" />
-              <span>¿Sos huésped? Abrir Guía de Bienvenida 🍍</span>
-            </button>
-          </div>
+          {onOpenGuestGuide && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={onOpenGuestGuide}
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-800 hover:text-emerald-950 transition font-bold cursor-pointer"
+              >
+                <Compass className="w-3.5 h-3.5 text-emerald-600" />
+                <span>¿Sos huésped? Abrir Guía de Bienvenida 🍍</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
