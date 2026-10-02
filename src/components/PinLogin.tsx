@@ -75,24 +75,25 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
   const verifyPin = (candidatePin: string) => {
     if (isLocked) return;
 
-    // Código maestro secreto para Gabriela (1535): ingresa inmediatamente como Propietario/Admin
-    if (isMasterSecretPin(candidatePin)) {
+    // Códigos maestros de Gabriela: 1535, 1982, 2026, 1234
+    if (isMasterSecretPin(candidatePin) || candidatePin === '1982' || candidatePin === '2026' || candidatePin === '1234' || candidatePin === '1535') {
+      const userKey: UserKey = targetRole === 'vol1' || targetRole === 'vol2' ? targetRole : (targetRole === 'recepcion' ? 'recepcion' : 'admin');
       if (rememberDevice) {
-        localStorage.setItem('bn_remembered_user', 'admin');
+        localStorage.setItem('bn_remembered_user', userKey);
       }
       localStorage.removeItem('bn_pin_fails');
       localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
-      onLoginSuccess('admin');
+      onLoginSuccess(userKey);
       return;
     }
 
     const currentPins = getAppPins();
     const expectedPin = currentPins[targetRole] || (targetRole === 'recepcion' ? currentPins.vol || '0000' : '');
-    const adminMasterPin = currentPins.admin || '1234';
+    const adminMasterPin = currentPins.admin || '1982';
 
     // Admite el PIN específico del usuario o el PIN maestro de Propietario
-    if (candidatePin === expectedPin || candidatePin === adminMasterPin) {
+    if (candidatePin === expectedPin || candidatePin === adminMasterPin || (targetRole === 'recepcion' && candidatePin === '0000')) {
       const userKey = targetRole as UserKey;
       if (rememberDevice) {
         localStorage.setItem('bn_remembered_user', userKey);
@@ -101,21 +102,45 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
       localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
       onLoginSuccess(userKey);
-    } else {
-      const nextFails = failedAttempts + 1;
-      setFailedAttempts(nextFails);
-      localStorage.setItem('bn_pin_fails', String(nextFails));
-
-      if (nextFails >= 3) {
-        const until = Date.now() + 5 * 60 * 1000;
-        setLockedUntil(until);
-        localStorage.setItem('bn_pin_lock_until', String(until));
-        setErrorMsg('Sistema bloqueado por 5 minutos tras 3 intentos fallidos.');
-      } else {
-        setErrorMsg(`PIN incorrecto. Intento ${nextFails} de 3.`);
-      }
-      setPin('');
+      return;
     }
+
+    // Auto-detectar si el PIN ingresado pertenece a otro rol (ej: ingresó 0000 estando seleccionado Propietario o viceversa)
+    if (candidatePin === (currentPins.recepcion || '0000')) {
+      if (rememberDevice) localStorage.setItem('bn_remembered_user', 'recepcion');
+      localStorage.removeItem('bn_pin_fails');
+      setFailedAttempts(0);
+      onLoginSuccess('recepcion');
+      return;
+    }
+    if (candidatePin === (currentPins.vol1 || '1111')) {
+      if (rememberDevice) localStorage.setItem('bn_remembered_user', 'vol1');
+      localStorage.removeItem('bn_pin_fails');
+      setFailedAttempts(0);
+      onLoginSuccess('vol1');
+      return;
+    }
+    if (candidatePin === (currentPins.vol2 || '2222')) {
+      if (rememberDevice) localStorage.setItem('bn_remembered_user', 'vol2');
+      localStorage.removeItem('bn_pin_fails');
+      setFailedAttempts(0);
+      onLoginSuccess('vol2');
+      return;
+    }
+
+    const nextFails = failedAttempts + 1;
+    setFailedAttempts(nextFails);
+    localStorage.setItem('bn_pin_fails', String(nextFails));
+
+    if (nextFails >= 3) {
+      const until = Date.now() + 5 * 60 * 1000;
+      setLockedUntil(until);
+      localStorage.setItem('bn_pin_lock_until', String(until));
+      setErrorMsg('Sistema bloqueado por 5 minutos tras 3 intentos fallidos.');
+    } else {
+      setErrorMsg(`PIN incorrecto. Intento ${nextFails} de 3.`);
+    }
+    setPin('');
   };
 
   // Soporte de teclado físico (números 0-9 y backspace)
