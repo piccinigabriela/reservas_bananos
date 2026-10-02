@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DEFAULT_PINS, isMasterSecretPin } from '../services/cabinConfig';
-import { ShieldCheck, X, Check, Lock } from 'lucide-react';
+import { ShieldCheck, X, Lock } from 'lucide-react';
 
 interface UnlockAdminModalProps {
   isOpen: boolean;
@@ -46,19 +46,19 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
 
     const pins = getSavedPins();
     
-    // 1. Maestro o Propietario (1982 por defecto)
-    if (isMasterSecretPin(candidatePin) || candidatePin === pins.admin) {
+    // 1. Propietario / Administración (1982, 1535)
+    if (isMasterSecretPin(candidatePin) || candidatePin === pins.admin || candidatePin === '1982' || candidatePin === '1535') {
       setPin('');
       setErrorMsg('');
       localStorage.removeItem('bn_pin_fails');
       localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
-      onSuccess('owner');
+      onSuccess('admin');
       return;
     }
 
-    // 2. Recepción (2026 por defecto)
-    if (candidatePin === pins.recepcion) {
+    // 2. Recepción / Día a Día (0000)
+    if (candidatePin === pins.recepcion || candidatePin === '0000') {
       setPin('');
       setErrorMsg('');
       localStorage.removeItem('bn_pin_fails');
@@ -68,14 +68,25 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
       return;
     }
 
-    // 3. Voluntario (0000 por defecto)
-    if (candidatePin === pins.voluntario) {
+    // 3. Voluntario 1
+    if (candidatePin === pins.vol1 || candidatePin === '1111') {
       setPin('');
       setErrorMsg('');
       localStorage.removeItem('bn_pin_fails');
       localStorage.removeItem('bn_pin_lock_until');
       setFailedAttempts(0);
       onSuccess('vol1');
+      return;
+    }
+
+    // 4. Voluntario 2
+    if (candidatePin === pins.vol2 || candidatePin === '2222') {
+      setPin('');
+      setErrorMsg('');
+      localStorage.removeItem('bn_pin_fails');
+      localStorage.removeItem('bn_pin_lock_until');
+      setFailedAttempts(0);
+      onSuccess('vol2');
       return;
     }
 
@@ -88,9 +99,9 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
       const until = Date.now() + lockDurationMs;
       setLockedUntil(until);
       localStorage.setItem('bn_pin_lock_until', String(until));
-      setErrorMsg(`Sistema bloqueado temporalmente por seguridad. Esperá 5 minutos.`);
+      setErrorMsg(`Sistema bloqueado por 5 minutos tras 3 intentos fallidos.`);
     } else {
-      setErrorMsg(`PIN no válido. Intento ${nextFails} de 3 antes del bloqueo temporal.`);
+      setErrorMsg(`PIN incorrecto. Intento ${nextFails} de 3.`);
     }
     setPin('');
   };
@@ -118,109 +129,102 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-150">
-      <div className="bg-[#1A1F26] text-[#F1F5F9] border border-[#2D3540] rounded-3xl p-6 sm:p-7 w-full max-w-xs sm:max-w-sm shadow-2xl space-y-5 text-center">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-150">
+      <div className="bg-white text-[#2A2118] border border-[#EAE0D2] rounded-3xl p-6 sm:p-7 w-full max-w-xs sm:max-w-sm shadow-2xl space-y-4 text-center">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
-              <ShieldCheck className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-base shadow-xs">
+              🌴
             </div>
-            <span className="font-bold text-sm text-white">Desbloquear Modo Propietario</span>
+            <div className="text-left">
+              <span className="font-extrabold text-sm text-[#2A2118] block leading-tight">Acceso al Sistema</span>
+              <span className="text-[10px] text-[#7A6752]">Cabañas Los Bananos</span>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+            className="p-1.5 text-[#7A6752] hover:text-[#2A2118] hover:bg-[#FAF5EE] rounded-xl transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <p className="text-xs text-slate-400 text-left leading-relaxed">
-          Ingresá tu PIN de propietario para ver balances, gráficos de rendimiento, gastos y configuración.
-        </p>
-
+        {/* Indicador o Bloqueo */}
         {isLocked ? (
-          <div className="p-4 bg-rose-950/60 border border-rose-800 rounded-2xl space-y-2">
-            <div className="text-rose-400 font-black text-sm flex items-center justify-center gap-2">
-              <Lock className="w-4 h-4" />
-              <span>Bloqueo de Seguridad Activado</span>
+          <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl space-y-2 text-center my-2">
+            <div className="text-rose-700 font-extrabold text-xs flex items-center justify-center gap-1.5">
+              <Lock className="w-4 h-4 text-rose-600" />
+              <span>Bloqueo temporal por seguridad</span>
             </div>
-            <p className="text-xs text-rose-200">
-              Se registraron 3 intentos fallidos consecutivos.
-            </p>
-            <div className="text-lg font-mono font-black text-rose-300">
+            <div className="text-xl font-mono font-black text-rose-900">
               {Math.floor(remainingSeconds / 60)}:{(remainingSeconds % 60).toString().padStart(2, '0')}
             </div>
           </div>
         ) : (
-          <>
-
-        {/* Indicador de 4 dígitos */}
-        <div className="space-y-2">
-          <div className="flex justify-center gap-3 py-1">
-            {[0, 1, 2, 3].map(idx => (
-              <div
-                key={idx}
-                className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                  pin.length > idx
-                    ? 'bg-blue-500 scale-125 shadow-xs'
-                    : 'bg-[#12151A] border border-[#2D3540]'
-                }`}
-              />
-            ))}
-          </div>
-
-          {errorMsg && (
-            <p className="text-xs font-bold text-rose-400 animate-shake">
-              {errorMsg}
+          <div className="space-y-3">
+            <p className="text-xs text-[#7A6752]">
+              Ingresá tu PIN de 4 dígitos para acceder al panel
             </p>
-          )}
-        </div>
 
-        {/* Teclado Táctil */}
-        <div className="grid grid-cols-3 gap-2 pt-1 max-w-[240px] mx-auto">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
-            <button
-              key={num}
-              onClick={() => handleDigit(num)}
-              className="h-11 rounded-xl bg-[#222933] hover:bg-[#2D3540] border border-[#2D3540] text-white font-bold text-lg shadow-xs transition active:scale-95 flex items-center justify-center cursor-pointer"
-            >
-              {num}
-            </button>
-          ))}
+            {/* Puntos de PIN */}
+            <div className="flex justify-center gap-3 py-1">
+              {[0, 1, 2, 3].map(idx => (
+                <div
+                  key={idx}
+                  className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
+                    pin.length > idx
+                      ? 'bg-emerald-600 scale-125 shadow-xs ring-2 ring-emerald-300'
+                      : 'bg-[#FAF5EE] border-2 border-[#D4C3AE]'
+                  }`}
+                />
+              ))}
+            </div>
 
-          <button
-            onClick={handleClear}
-            className="h-11 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-rose-400 font-bold text-xs transition active:scale-95 flex items-center justify-center cursor-pointer"
-          >
-            ✕
-          </button>
+            {errorMsg && (
+              <p className="text-xs font-bold text-rose-600 animate-bounce">
+                {errorMsg}
+              </p>
+            )}
 
-          <button
-            onClick={() => handleDigit('0')}
-            className="h-11 rounded-xl bg-[#222933] hover:bg-[#2D3540] border border-[#2D3540] text-white font-bold text-lg shadow-xs transition active:scale-95 flex items-center justify-center cursor-pointer"
-          >
-            0
-          </button>
+            {/* Teclado Numérico */}
+            <div className="grid grid-cols-3 gap-2 max-w-[240px] mx-auto pt-1">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleDigit(num)}
+                  className="h-11 rounded-xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-black text-lg transition active:scale-90 flex items-center justify-center cursor-pointer shadow-2xs"
+                >
+                  {num}
+                </button>
+              ))}
 
               <button
+                type="button"
+                onClick={handleClear}
+                className="h-11 rounded-xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 text-rose-700 font-bold text-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
+              >
+                Borrar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDigit('0')}
+                className="h-11 rounded-xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-black text-lg transition active:scale-90 flex items-center justify-center cursor-pointer shadow-2xs"
+              >
+                0
+              </button>
+
+              <button
+                type="button"
                 onClick={handleBackspace}
-                className="h-11 rounded-xl bg-[#222933] hover:bg-[#2D3540] border border-[#2D3540] text-slate-400 font-bold text-base transition active:scale-95 flex items-center justify-center cursor-pointer"
+                className="h-11 rounded-xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-[#D4C3AE] border border-[#D4C3AE] text-[#5A4838] font-bold text-base transition active:scale-90 flex items-center justify-center cursor-pointer"
               >
                 ⌫
               </button>
             </div>
-
-            <div className="pt-2 border-t border-[#2D3540] flex justify-end items-center text-xs">
-              <button
-                onClick={onClose}
-                className="text-slate-400 hover:text-white cursor-pointer px-3 py-1 rounded-lg"
-              >
-                Cancelar
-              </button>
-            </div>
-          </>
+          </div>
         )}
       </div>
     </div>

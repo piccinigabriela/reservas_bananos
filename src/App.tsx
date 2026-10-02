@@ -133,6 +133,13 @@ export default function App() {
   };
 
   const isReception = currentUser === 'recepcion' || currentUser === 'vol';
+  const isDarkMode = theme === 'dark';
+
+  // Estado sincronizado e inteligente de cabañas en tiempo real (Hook en el nivel superior SIEMPRE)
+  const effectiveCabinStatuses = React.useMemo(
+    () => getEffectiveCabinStatuses(cabinStatuses, reservas, volunteerTasks),
+    [cabinStatuses, reservas, volunteerTasks]
+  );
 
   // Cargar datos al iniciar
   useEffect(() => {
@@ -511,21 +518,18 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // 1. Si se solicita la Página de Bienvenida y Guía del Huésped (por URL directa o clic en el panel)
-  if (isGuestWelcomeOpen) {
+  // 1. Si el usuario NO está autenticado (o entra un huésped por URL directa)
+  // Mostramos SIEMPRE la Guía / Bienvenida de Huéspedes de forma segura (sin selector de PINs a la vista)
+  if (!currentUser || isGuestWelcomeOpen) {
     return (
       <>
         <GuestWelcomeView
           onBackToAdmin={() => {
-            setIsGuestWelcomeOpen(false);
-            setOpenedFromAdmin(false);
-            window.history.replaceState({}, '', window.location.pathname);
-            if (!currentUser) {
-              setIsUnlockAdminOpen(true);
-            }
+            setIsUnlockAdminOpen(true);
           }}
           openedFromAdmin={openedFromAdmin}
         />
+        {/* Modal seguro de ingreso de PIN para Propietario / Recepción */}
         <UnlockAdminModal
           isOpen={isUnlockAdminOpen}
           onClose={() => setIsUnlockAdminOpen(false)}
@@ -535,7 +539,7 @@ export default function App() {
     );
   }
 
-  // 2. Si se solicita la Landing Page pública de Huéspedes / Catálogo
+  // 2. Si se solicita la Landing Page pública de Catálogo / Reservas
   if (isLandingMode) {
     return (
       <>
@@ -561,24 +565,6 @@ export default function App() {
       </>
     );
   }
-
-  // 3. Si no ha ingresado el PIN del sistema de gestión interno
-  if (!currentUser) {
-    return (
-      <PinLogin
-        onLoginSuccess={user => setCurrentUser(user)}
-        onOpenGuestGuide={() => setIsGuestWelcomeOpen(true)}
-      />
-    );
-  }
-
-  const isDarkMode = theme === 'dark';
-
-  // Estado sincronizado e inteligente de cabañas en tiempo real
-  const effectiveCabinStatuses = React.useMemo(
-    () => getEffectiveCabinStatuses(cabinStatuses, reservas, volunteerTasks),
-    [cabinStatuses, reservas, volunteerTasks]
-  );
 
   // Si el usuario ingresó como Voluntario (Worldpackers 1 o 2)
   if (currentUser === 'vol1' || currentUser === 'vol2') {

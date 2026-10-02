@@ -896,7 +896,7 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
       )}
 
       {/* Pie de página con opción de compartir enlace */}
-      <div className="max-w-4xl mx-auto px-4 mt-8 text-center space-y-3">
+      <div className="max-w-4xl mx-auto px-4 mt-8 text-center space-y-3 pb-8">
         <button
           type="button"
           onClick={handleCopyWelcomeLink}
@@ -906,9 +906,19 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
           <span>{copiedLink ? '¡Enlace de Bienvenida Copiado!' : 'Copiar enlace de esta Guía'}</span>
         </button>
 
-        <p className="text-[11px] text-[#8C765C]">
-          Cabañas Los Bananos · Puerto Iguazú, Misiones · Diseñado con cariño para nuestros huéspedes 🌿
-        </p>
+        <div className="flex items-center justify-center gap-3 text-[11px] text-[#8C765C]">
+          <span>Cabañas Los Bananos · Puerto Iguazú, Misiones 🌿</span>
+          {onBackToAdmin && (
+            <button
+              type="button"
+              onClick={onBackToAdmin}
+              className="text-[#B09E88] hover:text-[#5A4838] transition font-medium cursor-pointer"
+              title="Acceso Personal / Administración"
+            >
+              🔒 Acceso Personal
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
