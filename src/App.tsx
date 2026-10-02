@@ -224,13 +224,18 @@ export default function App() {
     showToast('Modo Día a Día activado: solo calendario y cargas 🌿');
   };
 
-  // Desbloqueo exitoso de Modo Propietario mediante PIN
-  const handleUnlockAdminSuccess = () => {
-    setCurrentUser('admin');
-    setViewMode('advanced');
-    localStorage.setItem('bn_remembered_user', 'admin');
+  // Desbloqueo exitoso mediante PIN
+  const handleUnlockAdminSuccess = (role?: string) => {
+    const userRole: UserKey = role === 'recepcion' ? 'recepcion' : role === 'vol1' ? 'vol1' : 'admin';
+    setCurrentUser(userRole);
+    if (userRole === 'admin') {
+      setViewMode('advanced');
+    }
+    localStorage.setItem('bn_remembered_user', userRole);
     setIsUnlockAdminOpen(false);
-    showToast('Modo Propietario activado con acceso completo 👑');
+    setIsGuestWelcomeOpen(false);
+    setIsLandingMode(false);
+    showToast(userRole === 'admin' ? 'Modo Propietario activado con acceso completo 👑' : userRole === 'recepcion' ? 'Modo Recepción activado 🌿' : 'Portal Voluntario activado 🧑‍🌾');
   };
 
   // Sincronización manual de iCal
@@ -533,9 +538,21 @@ export default function App() {
     );
   }
 
-  // 3. Si no ha ingresado el PIN del sistema de gestión interno
+  // 3. Si no ha ingresado el PIN del sistema de gestión interno (Seguridad total para Huéspedes)
   if (!currentUser) {
-    return <PinLogin onLoginSuccess={user => setCurrentUser(user)} />;
+    return (
+      <div className="min-h-screen w-full bg-[#FAF7F2] text-[#2A2118]">
+        <GuestWelcomeView
+          onBackToAdmin={() => setIsUnlockAdminOpen(true)}
+          openedFromAdmin={false}
+        />
+        <UnlockAdminModal
+          isOpen={isUnlockAdminOpen}
+          onClose={() => setIsUnlockAdminOpen(false)}
+          onSuccess={handleUnlockAdminSuccess}
+        />
+      </div>
+    );
   }
 
   const isDarkMode = theme === 'dark';

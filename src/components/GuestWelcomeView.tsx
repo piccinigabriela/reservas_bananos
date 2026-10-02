@@ -542,29 +542,53 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
             </div>
           </div>
 
-          {/* Banner de Xenia invitando a chatear */}
-          <div 
-            onClick={() => setActiveTab('xenia')}
-            className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white rounded-3xl p-5 sm:p-6 shadow-md cursor-pointer hover:brightness-105 transition flex items-center justify-between gap-4"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0">
-                🍍
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="font-black text-base sm:text-lg">¿Dudas o pedidos? Preguntale a Xenia</h4>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-amber-950">
-                    24 Horas
-                  </span>
+          {/* Banner de Xenia invitando a chatear con preguntas rápidas integradas */}
+          <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white rounded-3xl p-5 sm:p-6 shadow-md transition space-y-4">
+            <div 
+              onClick={() => setActiveTab('xenia')}
+              className="flex items-center justify-between gap-4 cursor-pointer hover:brightness-105"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0">
+                  🍍
                 </div>
-                <p className="text-xs text-purple-200 mt-0.5">
-                  Nuestra concierge virtual te responde sobre Cataratas, deliveries, toallas, supermercados y paseos al instante.
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-black text-base sm:text-lg">¿Dudas o pedidos? Preguntale a Xenia</h4>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-amber-950">
+                      24 Horas
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-200 mt-0.5">
+                    Nuestra concierge virtual te responde sobre Cataratas, deliveries, toallas, supermercados y remises al instante.
+                  </p>
+                </div>
               </div>
+
+              <ChevronRight className="w-6 h-6 text-purple-300 shrink-0" />
             </div>
 
-            <ChevronRight className="w-6 h-6 text-purple-300 shrink-0" />
+            {/* Accesos rápidos de 1 toque */}
+            <div className="pt-2 border-t border-purple-800/60">
+              <span className="text-[11px] font-bold text-purple-200 uppercase tracking-wider block mb-2">
+                ⚡ Tocá cualquier consulta para preguntarle a Xenia:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {quickQuestions.slice(0, 6).map((q, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('xenia');
+                      handleSendXenia(q);
+                    }}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/25 active:scale-95 border border-white/20 text-purple-100 text-xs font-medium rounded-xl transition cursor-pointer"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Servicios y Comodidades Incluidas */}

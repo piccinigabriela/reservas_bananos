@@ -5,7 +5,7 @@ import { ShieldCheck, X, Check, Lock } from 'lucide-react';
 interface UnlockAdminModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (userRole?: string) => void;
 }
 
 export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
@@ -18,27 +18,43 @@ export const UnlockAdminModal: React.FC<UnlockAdminModalProps> = ({
 
   if (!isOpen) return null;
 
-  const getSavedAdminPin = () => {
+  const getSavedPins = () => {
     try {
       const saved = localStorage.getItem('bn_p');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.admin) return parsed.admin;
-      }
+      if (saved) return { ...DEFAULT_PINS, ...JSON.parse(saved) };
     } catch (_) {}
-    return DEFAULT_PINS.admin || '1234';
+    return DEFAULT_PINS;
   };
 
   const verifyPin = (candidatePin: string) => {
-    const adminPin = getSavedAdminPin();
-    if (isMasterSecretPin(candidatePin) || candidatePin === adminPin) {
+    const pins = getSavedPins();
+    
+    // 1. Maestro o Propietario (1982 por defecto)
+    if (isMasterSecretPin(candidatePin) || candidatePin === pins.admin) {
       setPin('');
       setErrorMsg('');
-      onSuccess();
-    } else {
-      setErrorMsg('PIN de Propietario incorrecto');
-      setPin('');
+      onSuccess('owner');
+      return;
     }
+
+    // 2. Recepción (2026 por defecto)
+    if (candidatePin === pins.recepcion) {
+      setPin('');
+      setErrorMsg('');
+      onSuccess('recepcion');
+      return;
+    }
+
+    // 3. Voluntario (0000 por defecto)
+    if (candidatePin === pins.voluntario) {
+      setPin('');
+      setErrorMsg('');
+      onSuccess('vol1');
+      return;
+    }
+
+    setErrorMsg('PIN no válido. Verificá los 4 dígitos.');
+    setPin('');
   };
 
   const handleDigit = (digit: string) => {
