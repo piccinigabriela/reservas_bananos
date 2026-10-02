@@ -81,6 +81,15 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Asegurar fondo cálido para la vista de huéspedes
+    const prevBg = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = '#FAF7F2';
+    return () => {
+      document.body.style.backgroundColor = prevBg;
+    };
+  }, []);
+
+  useEffect(() => {
     if (activeTab === 'xenia') {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }

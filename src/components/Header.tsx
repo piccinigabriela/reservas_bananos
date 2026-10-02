@@ -199,20 +199,19 @@ export const Header: React.FC<HeaderProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-xl bg-emerald-900/90 hover:bg-emerald-800 text-emerald-200 border border-emerald-500 font-bold transition active:scale-95 shadow-xs cursor-pointer"
                 >
                   <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>🌿 Ocultar y Salir a Modo Día a Día</span>
+                  <span>🌿 Salir a Modo Día a Día</span>
                 </button>
               )}
 
-              {/* Botón Ver Guía Huésped & Xenia */}
+              {/* Botón Ver Guía Huésped & Xenia (Único) */}
               {onOpenGuestWelcome && (
                 <button
                   onClick={onOpenGuestWelcome}
                   title="Ver la Página de Bienvenida y Concierge Xenia para Huéspedes"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition active:scale-95"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-700 font-bold transition active:scale-95 shadow-xs cursor-pointer"
                 >
                   <Compass className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden md:inline">Guía Huésped & Xenia</span>
-                  <span className="md:hidden">Guía</span>
+                  <span>🌴 Guía del Huésped</span>
                 </button>
               )}
 
@@ -220,7 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenGoogleCalendar}
                 title="Cargar archivo CSV exportado desde Google Calendar"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg bg-[#222933] hover:bg-[#2D3540] text-[#60A5FA] border border-[#2D3540] transition font-medium active:scale-95"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#222933] hover:bg-[#2D3540] text-[#60A5FA] border border-[#2D3540] transition font-medium active:scale-95 cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Google Calendar</span>
@@ -231,7 +230,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onToggleTheme}
                 title={isDarkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#222933] hover:bg-[#2D3540] text-[#F1F5F9] border border-[#2D3540] transition"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#222933] hover:bg-[#2D3540] text-[#F1F5F9] border border-[#2D3540] transition cursor-pointer"
               >
                 {isDarkMode ? (
                   <>
@@ -251,7 +250,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onSyncIcal}
                 disabled={isSyncing}
                 title="Sincronizar calendarios de Airbnb y Booking"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#222933] hover:bg-[#2D3540] text-[#94A3B8] hover:text-white transition border border-[#2D3540]"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#222933] hover:bg-[#2D3540] text-[#94A3B8] hover:text-white transition border border-[#2D3540] cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : ''}`} />
                 <span className="hidden lg:inline">{isSyncing ? 'Sincronizando...' : 'iCal'}</span>
@@ -261,7 +260,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onToggleDyslexiaMode}
                 title="Activar tipografía y espaciado de alta legibilidad para dislexia"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg transition border font-medium ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg transition border font-medium cursor-pointer ${
                   isDyslexiaMode
                     ? 'bg-amber-500 text-white border-amber-500'
                     : 'bg-[#222933] text-[#94A3B8] border-[#2D3540] hover:text-white'
@@ -271,116 +270,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="hidden md:inline">{isDyslexiaMode ? 'Lectura Fácil' : 'Lectura'}</span>
               </button>
 
-              {/* Botón directo: Rendimiento y Ganancias */}
-              <button
-                onClick={() => {
-                  if (currentTab === 'rendimiento') {
-                    onSelectTab('calendario');
-                  } else {
-                    onSelectTab('rendimiento');
-                  }
-                }}
-                title="Ver cuánto dinero generó el complejo este mes y por cabaña"
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition border ${
-                  currentTab === 'rendimiento'
-                    ? 'bg-emerald-600 text-white border-emerald-500'
-                    : 'bg-[#222933] text-emerald-400 border-[#2D3540] hover:bg-[#2D3540]'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span>
-                  {currentTab === 'rendimiento' ? '← Calendario' : '📊 Rendimiento'}
-                </span>
-              </button>
-
-              {/* Botón directo: Agente Xenia (WhatsApp/Instagram/Web) */}
-              <button
-                onClick={() => {
-                  if (currentTab === 'xenia') {
-                    onSelectTab('calendario');
-                  } else {
-                    onSelectTab('xenia');
-                  }
-                }}
-                title="Agente de reservas Xenia para WhatsApp, Instagram y Web"
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition border ${
-                  currentTab === 'xenia'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-md'
-                    : 'bg-[#222933] text-teal-400 border-[#2D3540] hover:bg-[#2D3540]'
-                }`}
-              >
-                <span className="text-sm">🍍</span>
-                <span>
-                  {currentTab === 'xenia' ? '← Calendario' : '🤖 Xenia Multicanal'}
-                </span>
-              </button>
-
-              {/* Botón rápido: Portal Voluntario */}
-              {onSwitchToVolunteer && (
-                <button
-                  onClick={() => onSwitchToVolunteer('vol1')}
-                  title="Ver la vista y tareas de los voluntarios (Worldpackers)"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-[#162B22] hover:bg-[#1E3B2E] text-emerald-300 border border-emerald-600/50 font-semibold transition active:scale-95"
-                >
-                  <span>🧑‍🌾</span>
-                  <span className="hidden sm:inline">Portal Voluntario</span>
-                </button>
-              )}
-
-              {/* Botón directo: Configuración & PINs */}
-              <button
-                onClick={() => {
-                  if (currentTab === 'config') {
-                    onSelectTab('calendario');
-                  } else {
-                    onSelectTab('config');
-                  }
-                }}
-                title="Configuración de PINs de 4 dígitos, nombres de voluntarios, iCal y respaldo"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg font-semibold transition border ${
-                  currentTab === 'config'
-                    ? 'bg-amber-600 text-white border-amber-500 shadow-md'
-                    : 'bg-[#222933] text-amber-300 border-[#2D3540] hover:bg-[#2D3540]'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">
-                  {currentTab === 'config' ? '← Calendario' : '⚙️ Config & PINs'}
-                </span>
-              </button>
-
-              {/* Botón rápido: Guía Huéspedes */}
-              {onOpenGuestWelcome && (
-                <button
-                  onClick={onOpenGuestWelcome}
-                  title="Abrir la Guía de Bienvenida del Huésped y Concierge Xenia"
-                  className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/70 font-semibold transition"
-                >
-                  <Compass className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Guía Huéspedes</span>
-                </button>
-              )}
-
-              {/* Más herramientas */}
-              <button
-                onClick={onToggleViewMode}
-                title="Ver otras herramientas: Gastos, Historial en tabla, Sincronización iCal"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition border ${
-                  viewMode === 'advanced'
-                    ? 'bg-[#2563EB] text-white border-[#3B82F6]'
-                    : 'bg-[#222933] text-[#94A3B8] border-[#2D3540] hover:text-white'
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">
-                  {viewMode === 'advanced' ? 'Opciones' : 'Más'}
-                </span>
-              </button>
-
               {/* Botón Cargar Reserva */}
               <button
                 onClick={onOpenNewReserva}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md transition transform active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md transition transform active:scale-95 cursor-pointer"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Cargar Reserva</span>
@@ -400,8 +293,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Barra de navegación secundaria (solo visible si activa 'Panel Completo' en Modo Propietario) */}
-      {!isReception && viewMode === 'advanced' && (
+      {/* Barra de navegación secundaria con todos los módulos en Modo Propietario */}
+      {!isReception && (
         <div className="bg-[#0E1013] border-t border-[#242A33] px-4 sm:px-6 py-1.5">
           <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto text-xs sm:text-sm scrollbar-none py-1">
             <span className="text-[#64748B] text-[11px] uppercase font-bold tracking-wider mr-1 hidden sm:inline">
@@ -410,9 +303,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onSelectTab('calendario')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'calendario'
-                  ? 'bg-emerald-600 text-white font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
@@ -422,9 +315,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onSelectTab('reservas')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'reservas'
-                  ? 'bg-emerald-600 text-white font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
@@ -434,9 +327,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onSelectTab('rendimiento')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'rendimiento'
-                  ? 'bg-emerald-600 text-white font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
@@ -446,9 +339,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onSelectTab('gastos')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'gastos'
-                  ? 'bg-emerald-600 text-white font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
@@ -458,9 +351,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onSelectTab('avisos')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'avisos'
-                  ? 'bg-emerald-600 text-white font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
@@ -470,9 +363,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onSelectTab('xenia')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'xenia'
-                  ? 'bg-emerald-600 text-white font-semibold'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
@@ -480,16 +373,27 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Xenia (WhatsApp/IG/Web)</span>
             </button>
 
+            {onSwitchToVolunteer && (
+              <button
+                onClick={() => onSwitchToVolunteer('vol1')}
+                title="Ver la vista y tareas de los voluntarios (Worldpackers)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-emerald-300 hover:bg-[#1A1F26] hover:text-white font-bold transition whitespace-nowrap cursor-pointer"
+              >
+                <span>🧑‍🌾</span>
+                <span>Portal Voluntarios</span>
+              </button>
+            )}
+
             <button
               onClick={() => onSelectTab('config')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === 'config'
-                  ? 'bg-emerald-600 text-white font-semibold'
-                  : 'text-[#94A3B8] hover:bg-[#1A1F26] hover:text-white'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-amber-300 hover:bg-[#1A1F26] hover:text-white'
               }`}
             >
               <Settings className="w-3.5 h-3.5" />
-              <span>Ajustes e iCal</span>
+              <span>⚙️ Configuración & PINs</span>
             </button>
           </div>
         </div>
