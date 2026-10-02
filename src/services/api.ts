@@ -112,13 +112,24 @@ function parseReservaFromDb(r: any): Reserva {
 }
 
 export async function fetchReservas(): Promise<Reserva[]> {
-  const localRaw = localStorage.getItem('bn_r');
-  const local: Reserva[] = localRaw ? JSON.parse(localRaw).map(parseReservaFromDb) : [];
+  let local: Reserva[] = [];
+  try {
+    const localRaw = localStorage.getItem('bn_r');
+    if (localRaw) {
+      local = JSON.parse(localRaw).map(parseReservaFromDb);
+    }
+  } catch (_) {}
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
     const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?select=*&order=creado.asc`, {
       headers: SB_HDR,
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const remoto: any[] = await res.json();
       const parsedRemoto = remoto.map(parseReservaFromDb);
@@ -129,9 +140,7 @@ export async function fetchReservas(): Promise<Reserva[]> {
 
       let finalReservas = parsedRemoto;
       if (localUnsynced.length > 0) {
-        console.log(`Detectadas ${localUnsynced.length} reservas locales pendientes de sincronizar con Supabase. Preservando y guardando.`);
         finalReservas = [...parsedRemoto, ...localUnsynced];
-        // Enviar a Supabase para persistir definitivamente
         saveReservas(finalReservas).catch(err => console.warn('Error sincronizando reservas locales a Supabase:', err));
       }
 
@@ -143,7 +152,7 @@ export async function fetchReservas(): Promise<Reserva[]> {
       return finalReservas;
     }
   } catch (err) {
-    console.warn('Supabase no disponible, usando localStorage:', err);
+    console.warn('Supabase no disponible o timeout, usando localStorage:', err);
   }
   return local;
 }
@@ -209,13 +218,24 @@ export async function clearAllReservasFromDb(): Promise<boolean> {
 }
 
 export async function fetchGastos(): Promise<Gasto[]> {
-  const localRaw = localStorage.getItem('bn_g');
-  const local: Gasto[] = localRaw ? JSON.parse(localRaw) : [];
+  let local: Gasto[] = [];
+  try {
+    const localRaw = localStorage.getItem('bn_g');
+    if (localRaw) {
+      local = JSON.parse(localRaw);
+    }
+  } catch (_) {}
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
     const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE_G}?select=*&order=fecha.desc`, {
       headers: SB_HDR,
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const remoto: Gasto[] = await res.json();
       if (remoto.length === 0 && local.length > 0) {
@@ -225,7 +245,7 @@ export async function fetchGastos(): Promise<Gasto[]> {
       return remoto;
     }
   } catch (err) {
-    console.warn('Supabase gastos no disponible, usando local:', err);
+    console.warn('Supabase gastos no disponible o timeout, usando local:', err);
   }
   return local;
 }

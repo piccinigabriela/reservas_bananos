@@ -86,12 +86,28 @@ export default function App() {
   const [openedFromAdmin, setOpenedFromAdmin] = useState<boolean>(false);
 
   // Datos
-  const [reservas, setReservas] = useState<Reserva[]>([]);
-  const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [reservas, setReservas] = useState<Reserva[]>(() => {
+    try {
+      const raw = localStorage.getItem('bn_r');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [gastos, setGastos] = useState<Gasto[]>(() => {
+    try {
+      const raw = localStorage.getItem('bn_g');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
+  });
   const [volunteerTasks, setVolunteerTasks] = useState<VolunteerTask[]>(() => getVolunteerTasks());
   const [volunteerNames, setVolunteerNames] = useState<Record<VolunteerId, string>>(() => getVolunteerNames());
   const [cabinStatuses, setCabinStatuses] = useState<Record<CabinCode, CabinStatusInfo>>(() => getCabinCleaningStatuses());
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    return !localStorage.getItem('bn_r');
+  });
   const [isSyncingIcal, setIsSyncingIcal] = useState<boolean>(false);
 
   // Modales
@@ -121,24 +137,32 @@ export default function App() {
   // Cargar datos al iniciar
   useEffect(() => {
     const initLoad = async () => {
-      setIsLoading(true);
-      const [loadedReservas, loadedGastos] = await Promise.all([
-        fetchReservas(),
-        fetchGastos(),
-      ]);
-      setReservas(loadedReservas);
-      setGastos(loadedGastos);
-      setVolunteerTasks(getVolunteerTasks());
-      setVolunteerNames(getVolunteerNames());
-      setIsLoading(false);
-
-      // Sincronización en segundo plano de feeds iCal
-      syncIcalFeeds(loadedReservas).then(({ count, updatedReservas }) => {
-        if (count > 0) {
-          setReservas(updatedReservas);
-          saveReservas(updatedReservas).catch(err => console.warn('Error guardando sync iCal:', err));
+      try {
+        const [loadedReservas, loadedGastos] = await Promise.all([
+          fetchReservas().catch(() => []),
+          fetchGastos().catch(() => []),
+        ]);
+        if (loadedReservas && loadedReservas.length > 0) {
+          setReservas(loadedReservas);
         }
-      });
+        if (loadedGastos && loadedGastos.length > 0) {
+          setGastos(loadedGastos);
+        }
+        setVolunteerTasks(getVolunteerTasks());
+        setVolunteerNames(getVolunteerNames());
+
+        // Sincronización en segundo plano de feeds iCal
+        syncIcalFeeds(loadedReservas).then(({ count, updatedReservas }) => {
+          if (count > 0) {
+            setReservas(updatedReservas);
+            saveReservas(updatedReservas).catch(err => console.warn('Error guardando sync iCal:', err));
+          }
+        }).catch(err => console.warn('Error syncIcalFeeds:', err));
+      } catch (err) {
+        console.error('Error initLoad:', err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     initLoad();
