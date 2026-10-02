@@ -76,10 +76,27 @@ export default function App() {
     return params.has('reservas') || params.has('catalogo') || params.has('web');
   });
 
-  // Vista de Bienvenida del Huésped / Guía Digital con Xenia (Link directo para Huéspedes)
+  // Vista de Bienvenida del Huésped / Guía Digital con Xenia (Link directo para Huéspedes por WhatsApp)
   const [isGuestWelcomeOpen, setIsGuestWelcomeOpen] = useState<boolean>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.has('bienvenida') || params.has('guia') || params.has('guest') || params.has('huesped');
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      return (
+        params.has('bienvenida') ||
+        params.has('guia') ||
+        params.has('guest') ||
+        params.has('huesped') ||
+        params.has('cabana') ||
+        params.has('depto') ||
+        hash.includes('guia') ||
+        hash.includes('bienvenida') ||
+        path.includes('guia') ||
+        path.includes('bienvenida')
+      );
+    } catch (_) {
+      return false;
+    }
   });
 
   // Saber si se abrió desde adentro del panel de administración
