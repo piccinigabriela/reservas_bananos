@@ -56,10 +56,10 @@ export default function App() {
     return (saved as 'focus' | 'advanced') || 'focus';
   });
 
-  // Tema: Modo Oscuro Charcoal o Modo Claro
+  // Tema: Modo Claro o Modo Oscuro
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('bn_theme');
-    return (saved as 'dark' | 'light') || 'dark';
+    return (saved as 'dark' | 'light') || 'light';
   });
 
   // Pestaña activa (solo relevante si está en modo advanced y modo propietario)

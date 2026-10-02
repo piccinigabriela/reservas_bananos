@@ -143,30 +143,30 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
         : (pins.vol2 || '2222');
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0F172A] via-[#111827] to-[#0A0E17] text-[#F1F5F9] flex flex-col items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#FDFBF7] via-[#F5EFE6] to-[#EBE2D3] text-[#2A2118] flex flex-col items-center justify-center p-4 selection:bg-emerald-600 selection:text-white relative">
       {/* Resplandor decorativo de fondo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center">
         <div className="w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-3xl" />
         <div className="w-[350px] h-[350px] bg-amber-500/10 rounded-full blur-3xl -mt-40 ml-40" />
       </div>
 
-      <div className="relative bg-[#1A2230]/95 backdrop-blur-md text-[#F1F5F9] border border-[#2D3A4F] rounded-3xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl space-y-5">
+      <div className="relative bg-white/95 backdrop-blur-md text-[#2A2118] border border-[#EAE0D2] rounded-3xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl space-y-5">
         
         {/* Logo e Identidad */}
         <div className="text-center space-y-1.5">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white text-3xl font-bold flex items-center justify-center mx-auto shadow-lg ring-4 ring-emerald-500/20">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white text-3xl font-bold flex items-center justify-center mx-auto shadow-md ring-4 ring-emerald-500/20">
             🌴
           </div>
-          <h1 className="font-extrabold text-2xl text-white tracking-tight">
-            Los Bananos Cabañas
+          <h1 className="font-black text-2xl text-[#2A2118] tracking-tight">
+            Cabañas Los Bananos
           </h1>
-          <p className="text-xs text-slate-400 font-medium">
+          <p className="text-xs text-[#7A6752] font-medium">
             Puerto Iguazú · Seleccioná tu perfil para ingresar
           </p>
         </div>
 
         {/* Selector de Perfil (4 opciones claras) */}
-        <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#0F1520] border border-[#263345] rounded-2xl">
+        <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#FAF5EE] border border-[#EAE0D2] rounded-2xl">
           {/* Recepción */}
           <button
             type="button"
@@ -177,16 +177,16 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
             }}
             className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
               targetRole === 'recepcion'
-                ? 'bg-emerald-600/30 border-2 border-emerald-400 text-white shadow-sm ring-1 ring-emerald-400/40'
-                : 'text-slate-400 hover:bg-[#1A2230] hover:text-white border-2 border-transparent'
+                ? 'bg-emerald-50 border-2 border-emerald-600 text-emerald-950 shadow-sm ring-2 ring-emerald-500/20'
+                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <Calendar className="w-4 h-4 text-emerald-400" />
-              {targetRole === 'recepcion' && <Check className="w-4 h-4 text-emerald-400" />}
+              <Calendar className="w-4 h-4 text-emerald-700" />
+              {targetRole === 'recepcion' && <Check className="w-4 h-4 text-emerald-700" />}
             </div>
-            <span className="font-bold text-xs block text-white">Día a Día</span>
-            <span className="text-[10px] text-emerald-300 font-medium leading-tight">Recepción (0000)</span>
+            <span className="font-extrabold text-xs block text-[#2A2118]">Día a Día</span>
+            <span className="text-[10px] text-emerald-700 font-semibold leading-tight">Recepción</span>
           </button>
 
           {/* Propietario */}
@@ -199,16 +199,16 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
             }}
             className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
               targetRole === 'admin'
-                ? 'bg-amber-600/30 border-2 border-amber-400 text-white shadow-sm ring-1 ring-amber-400/40'
-                : 'text-slate-400 hover:bg-[#1A2230] hover:text-white border-2 border-transparent'
+                ? 'bg-amber-50 border-2 border-amber-600 text-amber-950 shadow-sm ring-2 ring-amber-500/20'
+                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-              {targetRole === 'admin' && <Check className="w-4 h-4 text-amber-400" />}
+              <ShieldCheck className="w-4 h-4 text-amber-700" />
+              {targetRole === 'admin' && <Check className="w-4 h-4 text-amber-700" />}
             </div>
-            <span className="font-bold text-xs block text-white">Propietario</span>
-            <span className="text-[10px] text-amber-300 font-medium leading-tight">Ajustes & Números</span>
+            <span className="font-extrabold text-xs block text-[#2A2118]">Propietario</span>
+            <span className="text-[10px] text-amber-800 font-semibold leading-tight">Administración</span>
           </button>
 
           {/* Voluntario 1 */}
@@ -221,18 +221,18 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
             }}
             className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
               targetRole === 'vol1'
-                ? 'bg-cyan-600/30 border-2 border-cyan-400 text-white shadow-sm ring-1 ring-cyan-400/40'
-                : 'text-slate-400 hover:bg-[#1A2230] hover:text-white border-2 border-transparent'
+                ? 'bg-cyan-50 border-2 border-cyan-600 text-cyan-950 shadow-sm ring-2 ring-cyan-500/20'
+                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-base">🧑‍🌾</span>
-              {targetRole === 'vol1' && <Check className="w-4 h-4 text-cyan-400" />}
+              {targetRole === 'vol1' && <Check className="w-4 h-4 text-cyan-700" />}
             </div>
-            <span className="font-bold text-xs block truncate text-white">
+            <span className="font-extrabold text-xs block truncate text-[#2A2118]">
               {volNames.vol1?.split('(')[0]?.trim() || 'Voluntario 1'}
             </span>
-            <span className="text-[10px] text-cyan-300 font-medium leading-tight">Worldpackers</span>
+            <span className="text-[10px] text-cyan-800 font-semibold leading-tight">Worldpackers</span>
           </button>
 
           {/* Voluntario 2 */}
@@ -245,39 +245,39 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
             }}
             className={`p-3 rounded-xl text-left transition flex flex-col justify-between cursor-pointer ${
               targetRole === 'vol2'
-                ? 'bg-purple-600/30 border-2 border-purple-400 text-white shadow-sm ring-1 ring-purple-400/40'
-                : 'text-slate-400 hover:bg-[#1A2230] hover:text-white border-2 border-transparent'
+                ? 'bg-purple-50 border-2 border-purple-600 text-purple-950 shadow-sm ring-2 ring-purple-500/20'
+                : 'text-[#7A6752] hover:bg-white hover:text-[#2A2118] border-2 border-transparent'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-base">👩‍🌾</span>
-              {targetRole === 'vol2' && <Check className="w-4 h-4 text-purple-400" />}
+              {targetRole === 'vol2' && <Check className="w-4 h-4 text-purple-700" />}
             </div>
-            <span className="font-bold text-xs block truncate text-white">
+            <span className="font-extrabold text-xs block truncate text-[#2A2118]">
               {volNames.vol2?.split('(')[0]?.trim() || 'Voluntario 2'}
             </span>
-            <span className="text-[10px] text-purple-300 font-medium leading-tight">Worldpackers</span>
+            <span className="text-[10px] text-purple-800 font-semibold leading-tight">Worldpackers</span>
           </button>
         </div>
 
         {/* Sección de Ingreso de PIN de 4 dígitos o Bloqueo */}
         {isLocked ? (
-          <div className="p-4 bg-rose-950/60 border border-rose-800 rounded-2xl space-y-2 text-center my-3">
-            <div className="text-rose-400 font-black text-sm flex items-center justify-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-rose-400" />
+          <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl space-y-2 text-center my-3">
+            <div className="text-rose-700 font-black text-sm flex items-center justify-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-rose-600" />
               <span>Bloqueo de Seguridad Activado</span>
             </div>
-            <p className="text-xs text-rose-200">
+            <p className="text-xs text-rose-800">
               Se registraron 3 intentos fallidos de PIN.
             </p>
-            <div className="text-xl font-mono font-black text-rose-300">
+            <div className="text-xl font-mono font-black text-rose-900">
               {Math.floor(remainingSeconds / 60)}:{(remainingSeconds % 60).toString().padStart(2, '0')}
             </div>
           </div>
         ) : (
           <div className="space-y-4 pt-1">
             <div className="text-center space-y-1">
-              <span className="text-xs uppercase font-bold text-slate-300 tracking-wider block">
+              <span className="text-xs uppercase font-extrabold text-[#7A6752] tracking-wider block">
                 Ingresá el PIN de {getProfileRoleName()}
               </span>
 
@@ -289,16 +289,16 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
                     className={`w-4 h-4 rounded-full transition-all duration-150 ${
                       pin.length > idx
                         ? targetRole === 'admin'
-                          ? 'bg-amber-400 scale-125 shadow-md shadow-amber-500/50'
-                          : 'bg-emerald-400 scale-125 shadow-md shadow-emerald-500/50'
-                        : 'bg-[#0F1520] border-2 border-[#2D3A4F]'
+                          ? 'bg-amber-500 scale-125 shadow-md ring-2 ring-amber-300'
+                          : 'bg-emerald-600 scale-125 shadow-md ring-2 ring-emerald-300'
+                        : 'bg-[#FAF5EE] border-2 border-[#D4C3AE]'
                     }`}
                   />
                 ))}
               </div>
 
               {errorMsg && (
-                <p className="text-xs font-bold text-rose-400 animate-bounce">
+                <p className="text-xs font-bold text-rose-600 animate-bounce">
                   {errorMsg}
                 </p>
               )}
@@ -311,7 +311,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
                   key={num}
                   type="button"
                   onClick={() => handleDigit(num)}
-                  className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-emerald-600 border border-[#374760] text-white font-extrabold text-xl shadow-sm transition active:scale-90 flex items-center justify-center cursor-pointer"
+                  className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-extrabold text-xl shadow-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
                 >
                   {num}
                 </button>
@@ -320,7 +320,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
               <button
                 type="button"
                 onClick={handleClear}
-                className="h-12 rounded-2xl bg-rose-950/50 hover:bg-rose-900/60 active:bg-rose-800 border border-rose-800/50 text-rose-300 font-bold text-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
+                className="h-12 rounded-2xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 text-rose-700 font-bold text-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
                 title="Borrar todo"
               >
                 Borrar
@@ -329,7 +329,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
               <button
                 type="button"
                 onClick={() => handleDigit('0')}
-                className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-emerald-600 border border-[#374760] text-white font-extrabold text-xl shadow-sm transition active:scale-90 flex items-center justify-center cursor-pointer"
+                className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-emerald-600 active:text-white border border-[#D4C3AE] text-[#2A2118] font-extrabold text-xl shadow-xs transition active:scale-90 flex items-center justify-center cursor-pointer"
               >
                 0
               </button>
@@ -337,7 +337,7 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
               <button
                 type="button"
                 onClick={handleBackspace}
-                className="h-12 rounded-2xl bg-[#222E40] hover:bg-[#2C3B52] active:bg-slate-600 border border-[#374760] text-slate-300 font-bold text-lg transition active:scale-90 flex items-center justify-center cursor-pointer"
+                className="h-12 rounded-2xl bg-[#FAF5EE] hover:bg-[#EAE0D2] active:bg-[#D4C3AE] border border-[#D4C3AE] text-[#5A4838] font-bold text-lg transition active:scale-90 flex items-center justify-center cursor-pointer"
                 title="Borrar último dígito"
               >
                 ⌫
@@ -347,26 +347,27 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onLoginSuccess, onOpenGuestG
         )}
 
         {/* Checkbox para no pedirlo siempre en el celular */}
-        <div className="pt-2 border-t border-[#263345] space-y-2.5">
-          <label className="flex items-center justify-center gap-2 text-xs text-slate-400 cursor-pointer">
+        <div className="pt-2 border-t border-[#EAE0D2] space-y-2.5">
+          <label className="flex items-center justify-center gap-2 text-xs text-[#5A4838] cursor-pointer">
             <input
               type="checkbox"
               checked={rememberDevice}
               onChange={e => setRememberDevice(e.target.checked)}
-              className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
             />
-            <span>Recordar este usuario en este dispositivo</span>
+            <span className="font-medium">Recordar este usuario en este dispositivo</span>
           </label>
 
           {/* Enlace directo a Guía del Huésped */}
           <div className="text-center">
-            <a
-              href="?bienvenida=true"
-              className="inline-flex items-center gap-1.5 text-xs text-purple-300 hover:text-purple-200 transition font-medium"
+            <button
+              type="button"
+              onClick={onOpenGuestGuide}
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-800 hover:text-emerald-950 transition font-bold cursor-pointer"
             >
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
-              <span>¿Sos huésped? Abrir Guía de Bienvenida</span>
-            </a>
+              <Compass className="w-3.5 h-3.5 text-emerald-600" />
+              <span>¿Sos huésped? Abrir Guía de Bienvenida 🍍</span>
+            </button>
           </div>
         </div>
       </div>
