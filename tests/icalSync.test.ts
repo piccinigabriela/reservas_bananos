@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { planificarSync, parsearIcal, idEstable, Feed, ResultadoFeed } from '../src/services/icalSync';
 import { Reserva } from '../src/types';
+import { detectarConflictos } from '../src/services/reservaUtils';
 
 const HOY = '2026-10-09';
 const base = (r: Partial<Reserva>): Reserva =>
@@ -80,10 +81,15 @@ prueba('Evento de Google sin cabaña en el título: se informa y no se inventa C
   assert.equal(plan.sinCabana.length, 1);
 });
 
-prueba('Mismo huésped ya cargado en OTRA cabaña con las mismas fechas: no se crea bloqueo', () => {
+prueba('Mismo huésped cargado en OTRA cabaña: se bloquea la cabaña de Google y queda marcado para revisar', () => {
   const reservas = [base({ id: 'res_sara', depto: 'C9', huesped: 'Sara', checkin: '2026-12-02', checkout: '2026-12-05', precio: 40000 })];
   const plan = planificarSync(reservas, [{ feed: fGoogle, eventos: [{ uid: 's@google.com', ci: '2026-12-02', co: '2026-12-05', summary: 'C8 x3 Sara seña 40' }] }], HOY);
-  assert.equal(plan.creados, 0);
+  assert.equal(plan.creados, 1);
+  assert.equal(plan.upserts[0].depto, 'C8');
+  const todos = [...reservas, ...plan.upserts];
+  const c = detectarConflictos(todos as any, HOY);
+  assert.equal(c.length, 1);
+  assert.equal(c[0].tipo, 'mismo_huesped_otra_cabana');
 });
 
 prueba('Airbnb y Google anotan la misma reserva: un solo bloqueo', () => {
@@ -162,6 +168,16 @@ prueba('Con solo Airbnb cargado, NO se borran los bloqueos viejos de Google (pue
   const plan = planificarSync(reservas, [{ feed: fAirbnbC5, eventos: [] }], HOY);
   // Solo el bloqueo viejo de Airbnb de C5 (su calendario se leyó y ya no lo tiene)
   assert.deepEqual(plan.borrar, ['ical-C5-1418fb94e984-old']);
+});
+
+prueba('Tomás: Google lo tiene en C8 y la reserva real está en C5 → el bloqueo de C8 se mantiene (no queda libre)', () => {
+  const reservas = [
+    base({ id: 'muq4ow19fcnop', depto: 'C5', huesped: 'Tomas', checkin: '2026-11-05', checkout: '2026-11-10', plataforma: 'Booking' }),
+    base({ id: 'ical-C8-59sji18u2drlg2bbbhu4', depto: 'C8', huesped: '🔒 Tomas', checkin: '2026-11-05', checkout: '2026-11-10', plataforma: 'Google', notas: 'Sincronización Google Calendar · C8 tomas x 2 boo' }),
+  ];
+  const plan = planificarSync(reservas, [{ feed: fGoogle, eventos: [{ uid: '59sji18u2drlg2bbbhu4@google.com', ci: '2026-11-05', co: '2026-11-10', summary: 'C8 tomas x 2 boo' }] }], HOY);
+  assert.deepEqual(plan.borrar, []);
+  assert.equal(plan.upserts.find(u => u.id === 'ical-C8-59sji18u2drlg2bbbhu4')?.depto, 'C8');
 });
 
 console.log(`\n${ok} pruebas OK`);
