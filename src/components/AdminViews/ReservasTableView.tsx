@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { hoyIso } from '../../services/fechas';
 import { Reserva, CabinCode } from '../../types';
 import { 
   CABANAS, 
@@ -126,7 +127,7 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `reservas_bananos_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `reservas_bananos_${hoyIso()}.csv`;
     link.click();
   };
 
@@ -170,7 +171,7 @@ export const ReservasTableView: React.FC<ReservasTableViewProps> = ({
       headStyles: { fillColor: [42, 33, 24] },
     });
 
-    doc.save(`reservas_bananos_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`reservas_bananos_${hoyIso()}.pdf`);
   };
 
   return (

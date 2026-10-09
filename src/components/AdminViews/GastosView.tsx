@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { hoyIso } from '../../services/fechas';
 import { Gasto, CabinCode } from '../../types';
 import { CABANAS, DN, DC, formatMoney, formatDateEs } from '../../services/cabinConfig';
 import { Download, Trash2, PlusCircle } from 'lucide-react';
@@ -10,7 +11,7 @@ interface GastosViewProps {
 }
 
 export const GastosView: React.FC<GastosViewProps> = ({ gastos, onAddGasto, onDeleteGasto }) => {
-  const [fecha, setFecha] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState<string>(() => hoyIso());
   const [depto, setDepto] = useState<string>('General');
   const [categoria, setCategoria] = useState<string>('Limpieza');
   const [monto, setMonto] = useState<number | string>('');
@@ -37,7 +38,7 @@ export const GastosView: React.FC<GastosViewProps> = ({ gastos, onAddGasto, onDe
     setDescripcion('');
     setMonto('');
     setComprobante('');
-    setFecha(new Date().toISOString().split('T')[0]);
+    setFecha(hoyIso());
   };
 
   const handleExportCSV = () => {
@@ -58,7 +59,7 @@ export const GastosView: React.FC<GastosViewProps> = ({ gastos, onAddGasto, onDe
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `gastos_bananos_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `gastos_bananos_${hoyIso()}.csv`;
     link.click();
   };
 

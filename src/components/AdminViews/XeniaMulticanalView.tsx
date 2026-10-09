@@ -1,3 +1,4 @@
+import { cfg, guardarCfg } from '../../services/settings';
 import React, { useState, useEffect } from 'react';
 import { Reserva, CabinCode } from '../../types';
 import { DN, CABANAS, formatMoney } from '../../services/cabinConfig';
@@ -68,30 +69,29 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
-  // Reglas de negocio editables
-  const [rules, setRules] = useState({
+  // Reglas de negocio editables. Se guardan en la base (clave pública 'xenia_publico'),
+  // que es de donde las lee el servidor. Los datos de pago y tarifas arrancan VACÍOS:
+  // antes venían valores inventados (CBU, precios, "kayaks y muelle") que Xenia le decía a huéspedes reales.
+  type Tarifa = { precioARS: number | ''; precioUSD: number | ''; plusARS: number | ''; plusUSD: number | ''; paxBase: number | ''; capacidadMax: number | '' };
+  const tarifaVacia: Tarifa = { precioARS: '', precioUSD: '', plusARS: '', plusUSD: '', paxBase: '', capacidadMax: '' };
+  const [rules, setRules] = useState(() => ({
     checkinTime: '14:00',
     checkoutTime: '10:00',
     earlyCheckinInfo: 'El early check-in o late check-out está sujeto a disponibilidad el día previo.',
     senaPorcentaje: 50,
-    politicaCancelacion: 'Cancelación gratuita con reintegro total hasta 14 días antes del check-in.',
-    politicaMascotas: 'Aceptamos mascotas educadas en cabañas seleccionadas con aviso previo.',
-    serviciosIncluidos: 'Piscina común, kayaks y muelle, wifi, parrilla individual, aire acondicionado frío/calor, ropa blanca.',
-    aliasBancario: 'los.bananos.iguazu',
-    cbu: '0000003100098765432100',
-  });
-
-  // Cargar reglas del servidor al montar
-  useEffect(() => {
-    fetch('/api/xenia/rules')
-      .then(res => res.json())
-      .then(data => {
-        if (data.rules) {
-          setRules(prev => ({ ...prev, ...data.rules }));
-        }
-      })
-      .catch(() => {});
-  }, []);
+    politicaCancelacion: '',
+    politicaMascotas: '',
+    serviciosIncluidos: '',
+    aliasBancario: '',
+    cbu: '',
+    contactoHumano: '',
+    ...cfg<Record<string, any>>('xenia_publico', {}),
+    tarifas: {
+      big: { ...tarifaVacia, ...(cfg<any>('xenia_publico', {}).tarifas?.big || {}) },
+      te: { ...tarifaVacia, ...(cfg<any>('xenia_publico', {}).tarifas?.te || {}) },
+      tj: { ...tarifaVacia, ...(cfg<any>('xenia_publico', {}).tarifas?.tj || {}) },
+    } as Record<'big' | 'te' | 'tj', Tarifa>,
+  }));
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -102,19 +102,11 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
   const handleSaveRules = async () => {
     setSaveStatus('Guardando...');
     try {
-      const res = await fetch('/api/xenia/rules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rules),
-      });
-      if (res.ok) {
-        setSaveStatus('¡Reglas actualizadas en el servidor de Xenia! ✓');
-        setTimeout(() => setSaveStatus(null), 3000);
-      } else {
-        setSaveStatus('Error al guardar');
-      }
-    } catch (e) {
-      setSaveStatus('Error al conectar');
+      await guardarCfg('xenia_publico', rules);
+      setSaveStatus('Reglas guardadas ✓ Xenia las usa desde el próximo mensaje (puede tardar 1 minuto).');
+      setTimeout(() => setSaveStatus(null), 4000);
+    } catch (e: any) {
+      setSaveStatus(`Error al guardar: ${e?.message || e}`);
     }
   };
 
@@ -159,7 +151,7 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
           setActiveToolLog(primaryTool);
         }
 
-        if (data.reservaCreada) {
+        if (data.reservaCreada && data.guardadoEnBaseDeDatos) {
           onNewReservaCreated(data.reservaCreada);
         }
 
@@ -663,11 +655,11 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
                       <input
                         type="text"
                         readOnly
-                        value="bananos_xenia_secret_2026"
+                        value="(el que definas en el secreto META_VERIFY_TOKEN)"
                         className="flex-1 bg-[#0A0D12] border border-[#2C384A] rounded-xl px-3 py-2 text-xs font-mono text-white select-all"
                       />
                       <button
-                        onClick={() => handleCopy('bananos_xenia_secret_2026', 'wppToken')}
+                        onClick={() => handleCopy('META_VERIFY_TOKEN', 'wppToken')}
                         className="p-2 rounded-xl bg-[#1E2634] hover:bg-[#283244] text-[#CBD5E1] transition cursor-pointer"
                         title="Copiar Token"
                       >
@@ -733,11 +725,11 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
                       <input
                         type="text"
                         readOnly
-                        value="bananos_xenia_secret_2026"
+                        value="(el que definas en el secreto META_VERIFY_TOKEN)"
                         className="flex-1 bg-[#0A0D12] border border-[#2C384A] rounded-xl px-3 py-2 text-xs font-mono text-white select-all"
                       />
                       <button
-                        onClick={() => handleCopy('bananos_xenia_secret_2026', 'igToken')}
+                        onClick={() => handleCopy('META_VERIFY_TOKEN', 'igToken')}
                         className="p-2 rounded-xl bg-[#1E2634] hover:bg-[#283244] text-[#CBD5E1] transition cursor-pointer"
                         title="Copiar Token"
                       >
@@ -773,7 +765,7 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
               onClick={handleSaveRules}
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition shadow cursor-pointer shrink-0"
             >
-              Guardar Reglas en Servidor
+              Guardar Reglas
             </button>
           </div>
 
@@ -825,6 +817,71 @@ export const XeniaMulticanalView: React.FC<XeniaMulticanalViewProps> = ({
                 onChange={e => setRules({ ...rules, aliasBancario: e.target.value })}
                 className="w-full bg-[#0D1017] border border-[#2B3545] rounded-xl px-3 py-2 text-xs text-white font-mono"
                 placeholder="los.bananos.iguazu"
+              />
+            </div>
+          </div>
+
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-[#94A3B8] uppercase block">Tarifas por noche (si un tipo queda vacío, Xenia no cotiza ese tipo y deriva a una persona)</label>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-white">
+                <thead>
+                  <tr className="text-[#94A3B8]">
+                    <th className="text-left py-1 pr-2">Tipo</th>
+                    <th className="py-1 px-1">ARS/noche</th>
+                    <th className="py-1 px-1">USD/noche</th>
+                    <th className="py-1 px-1">Plus pax ARS</th>
+                    <th className="py-1 px-1">Plus pax USD</th>
+                    <th className="py-1 px-1">Pax incluidos</th>
+                    <th className="py-1 px-1">Máx. pax</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([['big', 'Big (C2, C3)'], ['te', 'Tiny (C5, C6, C8, C9)'], ['tj', 'Tiny Jacuzzi (C7)']] as const).map(([tipo, label]) => (
+                    <tr key={tipo}>
+                      <td className="py-1 pr-2 font-bold whitespace-nowrap">{label}</td>
+                      {(['precioARS', 'precioUSD', 'plusARS', 'plusUSD', 'paxBase', 'capacidadMax'] as const).map(campo => (
+                        <td key={campo} className="py-1 px-1">
+                          <input
+                            type="number"
+                            min="0"
+                            value={rules.tarifas[tipo][campo]}
+                            onChange={e =>
+                              setRules({
+                                ...rules,
+                                tarifas: { ...rules.tarifas, [tipo]: { ...rules.tarifas[tipo], [campo]: e.target.value === '' ? '' : Number(e.target.value) } },
+                              })
+                            }
+                            className="w-20 bg-[#0D1017] border border-[#2B3545] rounded-lg px-2 py-1.5 text-xs text-white"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold text-[#94A3B8] uppercase block mb-1">CBU / CVU para señas</label>
+              <input
+                type="text"
+                value={rules.cbu}
+                onChange={e => setRules({ ...rules, cbu: e.target.value })}
+                className="w-full bg-[#0D1017] border border-[#2B3545] rounded-xl px-3 py-2 text-xs text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-[#94A3B8] uppercase block mb-1">WhatsApp de contacto humano</label>
+              <input
+                type="text"
+                value={rules.contactoHumano}
+                onChange={e => setRules({ ...rules, contactoHumano: e.target.value })}
+                className="w-full bg-[#0D1017] border border-[#2B3545] rounded-xl px-3 py-2 text-xs text-white"
+                placeholder="+54 9 3757 …"
               />
             </div>
           </div>

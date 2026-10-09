@@ -12,7 +12,7 @@ export interface WhatsAppTemplate {
 }
 
 export const DEFAULT_WHATSAPP_CONFIG = {
-  wifiPass: 'losbananos2026',
+  wifiPass: '', // se configura en Avisos → Configurar enlaces (antes venía una clave inventada)
   guiaLink: typeof window !== 'undefined' ? `${window.location.origin}/?bienvenida=1` : 'https://losbananosiguazu.com/?bienvenida=1',
   mapsLink: 'https://www.google.com/maps/search/?api=1&query=Caba%C3%B1as+Los+Bananos+Puerto+Iguaz%C3%BA',
   resenaLink: 'https://www.google.com/maps/search/?api=1&query=Caba%C3%B1as+Los+Bananos+Puerto+Iguaz%C3%BA',

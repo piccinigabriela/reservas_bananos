@@ -85,7 +85,7 @@ export const VolunteerTaskModal: React.FC<VolunteerTaskModalProps> = ({
     if (trimmed) {
       const updated = { ...volNames, [selectedVolunteerId]: trimmed };
       setVolNames(updated);
-      saveVolunteerNames(updated);
+      saveVolunteerNames(updated).catch(e => alert(`No se pudo guardar el nombre: ${e?.message || e}`));
     }
     setIsEditingName(false);
   };

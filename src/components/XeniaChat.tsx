@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { hoyIso, sumarDias } from '../services/fechas';
 import { Reserva, Gasto, CabinCode } from '../types';
 import { DN, calcFinancials, formatMoney, formatDateEs, CABANAS, getTipoCambioVal, getFechaCorteCfg } from '../services/cabinConfig';
 import { 
@@ -137,14 +138,9 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
   const recordedTranscriptRef = useRef<string>('');
   const isDark = theme === 'dark';
 
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrowDate = new Date();
-  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-  const tomorrow = tomorrowDate.toISOString().split('T')[0];
-
-  const in7 = new Date();
-  in7.setDate(in7.getDate() + 7);
-  const in7Str = in7.toISOString().split('T')[0];
+  const today = hoyIso();
+  const tomorrow = sumarDias(today, 1);
+  const in7Str = sumarDias(today, 7);
 
   // Chequeo de soporte de voz
   const isTTSAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -649,13 +645,13 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         qLower.includes('propietario')
       ) {
         botResponse = '🔐 Accesos y PINs del Sistema Los Bananos:\n\n' +
-          '1. 👑 Propietario / Admin (PIN: 1234):\n' +
+          '1. 👑 Propietario / Admin (entra con link por mail):\n' +
           'Acceso total a finanzas, balances, gastos, rendimiento, exportación de calendarios y configuración.\n\n' +
-          '2. 🌿 Recepción / Día a Día (PIN: 0000):\n' +
+          '2. 🌿 Recepción / Día a Día (PIN personal de 6 dígitos):\n' +
           'Acceso operativo y ágil al calendario de reservas y recambios diarios sin números financieros.\n\n' +
-          '3. 🧑‍🌾 Voluntarios Worldpackers (PIN: 1111 y 2222):\n' +
+          '3. 🧑‍🌾 Voluntarios Worldpackers (PIN personal de 6 dígitos):\n' +
           'Acceso directo a su portal con lista de tareas asignadas (limpieza, parque, mantenimiento), check-ins y calendario general.\n\n' +
-          '💡 Podés personalizar los PINs y nombres en la pestaña "⚙️ Config & PINs".';
+          '💡 Los PIN se cambian desde Supabase (Authentication → Users); los nombres de voluntarios, en Configuración.';
       }
       // 6.b. Portal de Voluntarios y Worldpackers
       else if (
@@ -704,7 +700,7 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
           'Genera en 1 clic los mensajes de bienvenida, ruta, Wi-Fi, control de confort post-check-in y pedidos de reseñas con datos autocompletados del huésped.\n\n' +
           '3. 🧑‍🌾 Gestión de Voluntarios & Limpieza:\n' +
           'Asignación de tareas diarias (limpieza, parque, mantenimiento) y semáforo en vivo de cabañas listas o pendientes.\n\n' +
-          '4. 💰 Finanzas y Rendimiento (Modo Propietario - PIN 1234):\n' +
+          '4. 💰 Finanzas y Rendimiento (Modo Propietario):\n' +
           'Cálculo automático de ingresos brutos, comisiones de Airbnb/Booking, gastos operativos y líquido neto mes a mes.\n\n' +
           '5. 🎙️ Asistencia por Voz con Xenia:\n' +
           '¡Podés hablarme con el micrófono o tipear para saber quién llega hoy, qué cabañas están libres o cuánto generaste!';
@@ -719,7 +715,7 @@ export const XeniaChat: React.FC<XeniaChatProps> = ({ reservas, gastos, theme = 
         qLower.includes('doble reserva') ||
         qLower.includes('overbooking')
       ) {
-        botResponse = '¡Sí! Para que Airbnb se bloquee automáticamente cuando cargás una reserva directa acá:\n1. Entrá en Modo Propietario con PIN 1234 y tocá la pestaña "Ajustes".\n2. En la sección "Sincronización iCal Bidireccional", tocá "Exportar iCal (.ics)" para la cabaña que quieras.\n3. En Airbnb vas a tu anuncio > Disponibilidad > Conectar calendarios > Importar calendario y pegás el archivo o enlace. Airbnb leerá tus reservas directas y bloqueará esas fechas automáticamente para evitar doble reserva.';
+        botResponse = '¡Sí! Para que Airbnb se bloquee automáticamente cuando cargás una reserva directa acá:\n1. Entrá como Propietario y tocá la pestaña "Ajustes".\n2. En la sección "Sincronización iCal Bidireccional", tocá "Exportar iCal (.ics)" para la cabaña que quieras.\n3. En Airbnb vas a tu anuncio > Disponibilidad > Conectar calendarios > Importar calendario y pegás el archivo o enlace. Airbnb leerá tus reservas directas y bloqueará esas fechas automáticamente para evitar doble reserva.';
       }
       // 8. Google Calendar y sincronización CSV
       else if (qLower.includes('google') || qLower.includes('csv') || qLower.includes('importar') || qLower.includes('sincroniz')) {

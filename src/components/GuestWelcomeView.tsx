@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CABANAS, DN, DC } from '../services/cabinConfig';
 import { DEFAULT_WHATSAPP_CONFIG } from '../services/whatsappTemplates';
+import { fetchInfoPublica } from '../services/api';
 import { 
   Wifi, 
   MapPin, 
@@ -39,20 +40,14 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
   cabinParam,
   openedFromAdmin = false,
 }) => {
-  // Configuración de Wi-Fi y enlaces
-  const [config] = useState(() => {
-    try {
-      const saved = localStorage.getItem('bn_whatsapp_config');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.mapsLink && parsed.mapsLink.includes('maps.app.goo.gl/losbananosiguazu')) {
-          parsed.mapsLink = DEFAULT_WHATSAPP_CONFIG.mapsLink;
-        }
-        return { ...DEFAULT_WHATSAPP_CONFIG, ...parsed };
-      }
-    } catch (_) {}
-    return DEFAULT_WHATSAPP_CONFIG;
-  });
+  // Configuración pública (Wi-Fi, links) desde la base. Antes se leía del celular del huésped,
+  // así que el huésped nunca veía la clave real que cargaba el propietario.
+  const [config, setConfig] = useState<Record<string, any>>({ ...DEFAULT_WHATSAPP_CONFIG });
+  useEffect(() => {
+    fetchInfoPublica()
+      .then(({ guia }) => setConfig(c => ({ ...c, ...guia })))
+      .catch(() => {});
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'info' | 'xenia' | 'guia' | 'servicios'>('info');
   const [copiedWifi, setCopiedWifi] = useState(false);
@@ -480,8 +475,8 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
       {activeTab === 'info' && (
         <div className="max-w-4xl mx-auto px-4 mt-5 space-y-4 animate-in fade-in duration-200">
           
-          {/* Tarjeta Destacada Wi-Fi con botón 1 clic */}
-          <div className="bg-white border-2 border-emerald-400 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+          {/* Tarjeta Destacada Wi-Fi con botón 1 clic (solo si el propietario cargó la clave) */}
+          {config.wifiPass && <div className="bg-white border-2 border-emerald-400 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shadow-xs">
@@ -503,7 +498,7 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
             <div className="bg-[#F8F4EC] border border-[#E8DFC8] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="text-[11px] font-bold text-[#8C765C] uppercase block">Nombre de Red:</span>
-                <span className="text-base font-bold text-[#2A2118]">Los Bananos Huéspedes</span>
+                <span className="text-base font-bold text-[#2A2118]">{config.wifiRed || 'Los Bananos Huéspedes'}</span>
                 
                 <span className="text-[11px] font-bold text-[#8C765C] uppercase block mt-2">Contraseña:</span>
                 <span className="text-lg font-mono font-black text-emerald-800 tracking-wider">
@@ -520,7 +515,7 @@ export const GuestWelcomeView: React.FC<GuestWelcomeViewProps> = ({
                 <span>{copiedWifi ? '¡Clave Copiada! ✓' : 'Copiar Contraseña'}</span>
               </button>
             </div>
-          </div>
+          </div>}
 
           {/* Horarios & Normas Rápidas */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">

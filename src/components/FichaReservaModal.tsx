@@ -13,8 +13,9 @@ import {
   TIPOS,
   getMonedaPlatCfg,
   SEMAFORO_CONFIG,
-  getCabinCleaningStatuses
 } from '../services/cabinConfig';
+import { CabinCode, CabinStatusInfo } from '../types';
+import { hoyIso } from '../services/fechas';
 import {
   WHATSAPP_TEMPLATES,
   cleanPhoneNumber,
@@ -47,9 +48,17 @@ interface FichaReservaModalProps {
   onConvertIcal?: (reserva: Reserva) => void;
   onDelete?: (id: string) => void;
   isDyslexiaMode: boolean;
+  cabinStatuses?: Partial<Record<CabinCode, CabinStatusInfo>>;
+  /** Recepción/propietario pueden editar; voluntarios solo ven. */
+  puedeEditar?: boolean;
 }
 
-export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
+// Antes este componente llamaba hooks DESPUÉS de "if (!reserva) return null", lo que
+// rompe React ("Rendered more hooks than during the previous render") al abrir una ficha.
+export const FichaReservaModal: React.FC<FichaReservaModalProps> = props =>
+  props.reserva ? <FichaReservaContenido {...props} reserva={props.reserva} /> : null;
+
+const FichaReservaContenido: React.FC<FichaReservaModalProps & { reserva: Reserva }> = ({
   reserva,
   onClose,
   onEdit,
@@ -57,8 +66,9 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
   onConvertIcal,
   onDelete,
   isDyslexiaMode,
+  cabinStatuses = {},
+  puedeEditar = true,
 }) => {
-  if (!reserva) return null;
 
   const isIcal = !!reserva.icalUid;
   const isUnassigned = esSinAsignar(reserva.depto);
@@ -77,7 +87,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
   const cabinColor = DC[reserva.depto] || '#2A2118';
 
   // Estado de plantilla seleccionada para WhatsApp
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = hoyIso();
   const defaultTemplateId = reserva.checkin === todayIso 
     ? 'tpl-2' 
     : reserva.checkout === todayIso 
@@ -168,8 +178,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
         <div className={`p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1 ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
           {/* Indicador de Habilitación / Limpieza de la Cabaña */}
           {!isUnassigned && (() => {
-            const allStatuses = getCabinCleaningStatuses();
-            const cabinInfo = allStatuses[reserva.depto as keyof typeof allStatuses];
+            const cabinInfo = cabinStatuses[reserva.depto as CabinCode];
             const st = cabinInfo?.status || 'limpia';
             const cfg = SEMAFORO_CONFIG[st];
 
@@ -222,7 +231,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
                 {formatDateExtended(reserva.checkin)} ➔ {formatDateExtended(reserva.checkout)} ({noches} noches)
               </div>
 
-              <button
+              {puedeEditar && <button
                 onClick={() => {
                   onClose();
                   if (onConvertIcal) onConvertIcal(reserva);
@@ -230,7 +239,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
                 className="w-full py-3 px-4 bg-[#D2502A] hover:bg-[#B53F1D] text-white font-bold text-sm sm:text-base rounded-xl transition shadow-md flex items-center justify-center gap-2"
               >
                 <span>➕ Convertir en Reserva Confirmada</span>
-              </button>
+              </button>}
             </div>
           ) : (
             <>
@@ -439,7 +448,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
           {/* Botones de acción táctiles grandes */}
           <div className="flex flex-wrap gap-2.5 pt-1">
             {/* Si es reserva de Booking sin cabaña asignada */}
-            {isUnassigned && onAssignCabin && (
+            {puedeEditar && isUnassigned && onAssignCabin && (
               <button
                 onClick={() => {
                   onClose();
@@ -464,7 +473,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
             )}
 
             {/* Notificar a Telegram */}
-            {!isIcal && (
+            {puedeEditar && !isIcal && (
               <button
                 onClick={handleSendTelegram}
                 disabled={tgLoading}
@@ -477,7 +486,7 @@ export const FichaReservaModal: React.FC<FichaReservaModalProps> = ({
             )}
 
             {/* Editar */}
-            {!isIcal && (
+            {puedeEditar && !isIcal && (
               <button
                 onClick={() => {
                   onClose();

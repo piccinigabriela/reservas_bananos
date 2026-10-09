@@ -1,692 +1,628 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import crypto from 'crypto';
 import 'dotenv/config';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
+/**
+ * Servidor de Los Bananos (corre en AI Studio / Cloud Run).
+ *
+ * Cambios de seguridad respecto de la versión anterior:
+ *  - Sin claves escritas en el código: todo sale de variables de entorno (secretos de AI Studio).
+ *  - Lee la base solo a través de funciones públicas acotadas (sin nombres ni teléfonos).
+ *  - /api/xenia/rules ya NO acepta cambios sin login (antes cualquiera podía cambiar el CBU).
+ *  - /api/fetch-ical exige sesión del personal y solo baja calendarios de Google/Airbnb/Booking.
+ *  - El chat público tiene límite de mensajes por IP.
+ *  - El webhook de Meta valida la firma antes de responder por WhatsApp.
+ */
+
 const app = express();
-const PORT = 3000;
+const PORT = 3000; // AI Studio / Cloud Run espera este puerto (igual que la versión anterior)
 
-app.use(express.json());
-
-// Configuración de Supabase para leer y asentar reservas en vivo
-const SB_URL = 'https://vnfgitgadadjjjciftsa.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuZmdpdGdhZGFkampqY2lmdHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjI5MzgsImV4cCI6MjA5NTMzODkzOH0.g018Do3-8UvyWATZg-EesrXH8T5L65YXomK1mjsSnHQ';
+const SB_URL = process.env.SUPABASE_URL || 'https://vnfgitgadadjjjciftsa.supabase.co';
+// La anon key es pública por diseño (la protección son las políticas RLS)
+const SB_ANON =
+  process.env.SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuZmdpdGdhZGFkampqY2lmdHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjI5MzgsImV4cCI6MjA5NTMzODkzOH0.g018Do3-8UvyWATZg-EesrXH8T5L65YXomK1mjsSnHQ';
+// Solo para que Xenia pueda registrar reservas pendientes. Si no está, Xenia deriva a una persona.
+const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SB_TABLE = 'reservas_bananos';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
-const CABANAS_INFO: Record<string, { nombre: string; tipo: 'big' | 'tj' | 'te'; capacidadMax: number; paxBase: number; precioARS: number; precioUSD: number; plusARS: number; plusUSD: number; descripcion: string }> = {
-  C2: { nombre: 'Cabaña 2 (Big)', tipo: 'big', capacidadMax: 6, paxBase: 4, precioARS: 75000, precioUSD: 50, plusARS: 12000, plusUSD: 8, descripcion: 'Cabaña amplia con 2 habitaciones, living, cocina y terraza privada, ideal para familias de 4 a 6 personas.' },
-  C3: { nombre: 'Cabaña 3 (Big)', tipo: 'big', capacidadMax: 6, paxBase: 4, precioARS: 75000, precioUSD: 50, plusARS: 12000, plusUSD: 8, descripcion: 'Cabaña espaciosa con 2 dormitorios, parrilla y vista a la selva misionera.' },
-  C5: { nombre: 'Cabaña 5 (Tiny)', tipo: 'te', capacidadMax: 4, paxBase: 2, precioARS: 52000, precioUSD: 35, plusARS: 10000, plusUSD: 7, descripcion: 'Tiny house de diseño compacto y moderno para 2 a 4 personas con cocina completa y deck privado.' },
-  C6: { nombre: 'Cabaña 6 (Tiny)', tipo: 'te', capacidadMax: 4, paxBase: 2, precioARS: 52000, precioUSD: 35, plusARS: 10000, plusUSD: 7, descripcion: 'Tiny house acogedora y luminosa rodeada de vegetación autóctona.' },
-  C7: { nombre: 'Cabaña 7 (Tiny Jacuzzi)', tipo: 'tj', capacidadMax: 2, paxBase: 2, precioARS: 68000, precioUSD: 45, plusARS: 0, plusUSD: 0, descripcion: 'Nuestra cabaña romántica exclusiva para parejas, con hidromasaje/jacuzzi privado en el deck exterior.' },
-  C8: { nombre: 'Cabaña 8 (Tiny)', tipo: 'te', capacidadMax: 4, paxBase: 2, precioARS: 52000, precioUSD: 35, plusARS: 10000, plusUSD: 7, descripcion: 'Tiny house confortable con aire frío/calor, parrilla individual y cocina equipada.' },
-  C9: { nombre: 'Cabaña 9 (Tiny)', tipo: 'te', capacidadMax: 4, paxBase: 2, precioARS: 52000, precioUSD: 35, plusARS: 10000, plusUSD: 7, descripcion: 'Tiny house tranquila al final del complejo con excelente privacidad.' },
-};
-
-const CABANAS_NOMBRES: Record<string, string> = Object.fromEntries(
-  Object.entries(CABANAS_INFO).map(([k, v]) => [k, v.nombre])
+app.disable('x-powered-by');
+app.set('trust proxy', true);
+app.use(
+  express.json({
+    limit: '100kb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
 );
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
-// Reglas de negocio y Base de Conocimiento de Cabañas Los Bananos
-let xeniaRules = {
-  checkinTime: '14:00',
-  checkoutTime: '10:00',
-  earlyCheckinInfo: 'El early check-in o late check-out está sujeto a disponibilidad el día previo y puede tener un costo adicional.',
-  senaPorcentaje: 50,
-  politicaCancelacion: 'Cancelación gratuita hasta 14 días antes del check-in con reintegro total. Entre 7 y 14 días se reprograma la fecha según disponibilidad. Con menos de 7 días no reembolsable.',
-  politicaMascotas: 'Aceptamos mascotas educadas en cabañas seleccionadas con aviso previo. Se solicita cuidado del mobiliario y mantenerla con correa en áreas comunes.',
-  serviciosIncluidos: 'Piscina común, kayaks y muelle, wifi de alta velocidad, parrilla individual en cada cabaña, aire acondicionado frío/calor, ropa de cama y toallas, estacionamiento dentro del predio.',
-  formasPago: 'Transferencia bancaria en pesos (al tipo de cambio del día para señar), o en efectivo/dólares al llegar.',
-  aliasBancario: 'los.bananos.iguazu',
-  cbu: '0000003100098765432100',
-  contactoHumano: '+54 9 3757 55-1234',
-  ubicacion: 'Puerto Iguazú, Misiones, a minutos del Parque Nacional Cataratas y a 5 minutos del centro.',
+// ---------------------------------------------------------------- Datos de las cabañas (sin precios inventados)
+type Tipo = 'big' | 'te' | 'tj';
+const CABANAS: Record<string, { nombre: string; tipo: Tipo }> = {
+  C2: { nombre: 'Cabaña 2 (Big)', tipo: 'big' },
+  C3: { nombre: 'Cabaña 3 (Big)', tipo: 'big' },
+  C5: { nombre: 'Cabaña 5 (Tiny)', tipo: 'te' },
+  C6: { nombre: 'Cabaña 6 (Tiny)', tipo: 'te' },
+  C7: { nombre: 'Cabaña 7 (Tiny Jacuzzi)', tipo: 'tj' },
+  C8: { nombre: 'Cabaña 8 (Tiny)', tipo: 'te' },
+  C9: { nombre: 'Cabaña 9 (Tiny)', tipo: 'te' },
+};
+const CAPACIDAD_DEFECTO: Record<Tipo, { paxBase: number; capacidadMax: number }> = {
+  big: { paxBase: 4, capacidadMax: 6 },
+  te: { paxBase: 2, capacidadMax: 4 },
+  tj: { paxBase: 2, capacidadMax: 2 },
 };
 
-// Endpoint público iCal para que Airbnb o Booking sincronicen automáticamente
-app.get('/api/ical/:cabinCode.ics', async (req, res) => {
-  const { cabinCode } = req.params;
-  const upperCode = (cabinCode || '').toUpperCase();
-
-  try {
-    const response = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?depto=eq.${upperCode}&select=*`, {
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SB_KEY,
-        Authorization: `Bearer ${SB_KEY}`,
-      },
-    });
-
-    if (!response.ok) {
-      return res.status(500).send('Error leyendo reservas');
-    }
-
-    const reservas: any[] = await response.json();
-    const cabinName = CABANAS_NOMBRES[upperCode] || upperCode;
-
-    const now = new Date();
-    const dtstamp = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-
-    const lines: string[] = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//Cabanas Los Bananos//Calendario iCal v1.0//ES',
-      'CALSCALE:GREGORIAN',
-      'METHOD:PUBLISH',
-      `X-WR-CALNAME:Los Bananos - ${cabinName}`,
-      'X-WR-TIMEZONE:America/Argentina/Buenos_Aires',
-    ];
-
-    for (const r of reservas) {
-      if (r.estado === 'Cancelada' || r.estado === 'Non show' || !r.checkin || !r.checkout) {
-        continue;
-      }
-
-      const uid = `reserva-${r.id || Math.random().toString(36).substring(2, 9)}@bananos.app`;
-      const dtstart = r.checkin.replace(/-/g, '');
-      const dtend = r.checkout.replace(/-/g, '');
-      const summary = r.plataforma === 'Airbnb' ? 'Reserva Airbnb' : `Reservado (${r.plataforma || 'Directa'})`;
-
-      lines.push('BEGIN:VEVENT');
-      lines.push(`UID:${uid}`);
-      lines.push(`DTSTAMP:${dtstamp}`);
-      lines.push(`DTSTART;VALUE=DATE:${dtstart}`);
-      lines.push(`DTEND;VALUE=DATE:${dtend}`);
-      lines.push(`SUMMARY:${summary}`);
-      lines.push(`DESCRIPTION:Reserva Los Bananos (${cabinName})`);
-      lines.push('STATUS:CONFIRMED');
-      lines.push('TRANSP:OPAQUE');
-      lines.push('END:VEVENT');
-    }
-
-    lines.push('END:VCALENDAR');
-
-    const icsContent = lines.join('\r\n');
-    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    res.setHeader('Content-Disposition', `inline; filename="Los_Bananos_${upperCode}.ics"`);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    return res.status(200).send(icsContent);
-  } catch (error) {
-    console.error('Error generando iCal feed:', error);
-    return res.status(500).send('Error interno generando iCal');
-  }
-});
-
-// Proxy seguro para obtener calendarios iCal externos (Google Calendar, Airbnb, Booking) sin problemas de CORS
-app.get('/api/fetch-ical', async (req, res) => {
-  const targetUrl = req.query.url as string;
-  if (!targetUrl) {
-    return res.status(400).json({ error: 'URL requerida' });
-  }
-
-  try {
-    const cleanUrl = decodeURIComponent(targetUrl).trim();
-    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-      return res.status(400).json({ error: 'URL no válida' });
-    }
-
-    const response = await fetch(cleanUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) BananosCalendar/1.0',
-        Accept: 'text/calendar, text/plain, */*',
-      },
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: `Error remoto del servidor de calendario (${response.status})` });
-    }
-
-    const text = await response.text();
-    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    return res.status(200).send(text);
-  } catch (err: any) {
-    console.error('Error en /api/fetch-ical proxy:', err);
-    return res.status(500).json({ error: err.message || 'Error descargando calendario' });
-  }
-});
-
-// Helper: Consultar reservas activas desde Supabase
-async function fetchSupabaseReservas(): Promise<any[]> {
-  try {
-    const response = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?select=*`, {
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SB_KEY,
-        Authorization: `Bearer ${SB_KEY}`,
-      },
-    });
-    if (response.ok) {
-      return await response.json();
-    }
-  } catch (err) {
-    console.warn('Fallo leyendo Supabase, operando con estado local:', err);
-  }
-  return [];
+// ---------------------------------------------------------------- Helpers Supabase
+async function rpc<T>(nombre: string, args: Record<string, unknown> = {}): Promise<T> {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${nombre}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` },
+    body: JSON.stringify(args),
+  });
+  if (!r.ok) throw new Error(`RPC ${nombre}: ${r.status} ${await r.text()}`);
+  return (await r.json()) as T;
 }
 
-// Helper: Guardar nueva reserva en Supabase
-async function insertSupabaseReserva(reserva: any): Promise<boolean> {
-  try {
-    const response = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SB_KEY,
-        Authorization: `Bearer ${SB_KEY}`,
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify(reserva),
-    });
-    return response.ok;
-  } catch (err) {
-    console.error('Error guardando en Supabase:', err);
-    return false;
-  }
+interface ReglasXenia {
+  checkinTime?: string;
+  checkoutTime?: string;
+  earlyCheckinInfo?: string;
+  senaPorcentaje?: number;
+  politicaCancelacion?: string;
+  politicaMascotas?: string;
+  serviciosIncluidos?: string;
+  formasPago?: string;
+  aliasBancario?: string;
+  cbu?: string;
+  contactoHumano?: string;
+  ubicacion?: string;
+  tarifas?: Partial<Record<Tipo, { precioARS?: number | ''; precioUSD?: number | ''; plusARS?: number | ''; plusUSD?: number | ''; paxBase?: number | ''; capacidadMax?: number | '' }>>;
 }
 
-// Herramienta 1: Consultar disponibilidad
-async function toolConsultarDisponibilidad(checkin: string, checkout: string, pax?: number) {
-  const reservas = await fetchSupabaseReservas();
-  const cIn = checkin.trim();
-  const cOut = checkout.trim();
-
-  // Filtrar cabañas ocupadas
-  const ocupadas = new Set<string>();
-  for (const r of reservas) {
-    if (r.estado === 'Cancelada' || r.estado === 'Non show' || !r.checkin || !r.checkout) continue;
-    // Solapamiento: el rango se cruza si !(r.checkout <= cIn || r.checkin >= cOut)
-    const seCruzan = !(r.checkout <= cIn || r.checkin >= cOut);
-    if (seCruzan && r.depto) {
-      ocupadas.add(r.depto.toUpperCase());
-    }
+let cacheReglas: { valor: ReglasXenia; hasta: number } | null = null;
+async function reglasXenia(): Promise<ReglasXenia> {
+  if (cacheReglas && cacheReglas.hasta > Date.now()) return cacheReglas.valor;
+  try {
+    const info = await rpc<{ xenia?: ReglasXenia }>('bananos_info_publica');
+    cacheReglas = { valor: info?.xenia || {}, hasta: Date.now() + 60_000 };
+  } catch (e) {
+    console.warn('No se pudieron leer las reglas de Xenia:', e);
+    cacheReglas = { valor: cacheReglas?.valor || {}, hasta: Date.now() + 15_000 };
   }
+  return cacheReglas.valor;
+}
 
-  const cabanasCodigos = ['C2', 'C3', 'C5', 'C6', 'C7', 'C8', 'C9'];
-  const disponibles = cabanasCodigos
-    .filter(code => !ocupadas.has(code))
-    .map(code => {
-      const info = CABANAS_INFO[code];
-      return {
-        codigo: code,
-        nombre: info.nombre,
-        tipo: info.tipo,
-        capacidadMax: info.capacidadMax,
-        tarifaNocheARS: info.precioARS,
-        tarifaNocheUSD: info.precioUSD,
-        aptaParaPax: pax ? pax <= info.capacidadMax : true,
-        descripcion: info.descripcion,
-      };
-    });
+const numOrNull = (v: unknown) => (v === '' || v === null || v === undefined || isNaN(Number(v)) ? null : Number(v));
 
-  const aptas = pax ? disponibles.filter(c => c.aptaParaPax) : disponibles;
-
+function capacidad(reglas: ReglasXenia, tipo: Tipo) {
+  const t = reglas.tarifas?.[tipo] || {};
   return {
-    fechas: { checkin: cIn, checkout: cOut },
-    paxSolicitados: pax || 'no especificado',
-    totalCabanasDisponibles: aptas.length,
-    cabanasDisponibles: aptas,
-    todasDisponibles: disponibles,
-    ocupadas: Array.from(ocupadas),
+    paxBase: numOrNull(t.paxBase) ?? CAPACIDAD_DEFECTO[tipo].paxBase,
+    capacidadMax: numOrNull(t.capacidadMax) ?? CAPACIDAD_DEFECTO[tipo].capacidadMax,
   };
 }
 
-// Herramienta 2: Cotizar estadía
-function toolCotizarEstadia(cabanaCode: string, checkin: string, checkout: string, pax: number = 2, moneda: 'ARS' | 'USD' = 'ARS') {
-  const code = (cabanaCode || 'C5').toUpperCase();
-  const info = CABANAS_INFO[code] || CABANAS_INFO['C5'];
-  const start = new Date(checkin);
-  const end = new Date(checkout);
-  const noches = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000));
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
-  const precioNoche = moneda === 'USD' ? info.precioUSD : info.precioARS;
-  const plusNoche = moneda === 'USD' ? info.plusUSD : info.plusARS;
-  const pasajerosExtra = Math.max(0, pax - info.paxBase);
-  const totalPlusNoche = pasajerosExtra * plusNoche;
-  const subtotalPorNoche = precioNoche + totalPlusNoche;
-  const montoTotal = subtotalPorNoche * noches;
-  const montoSena = Math.round((montoTotal * xeniaRules.senaPorcentaje) / 100);
-  const saldoAlIngreso = montoTotal - montoSena;
+/** Cabañas libres entre dos fechas (las "sin asignar" ocupan un lugar de su tipo). */
+async function cabanasLibres(checkin: string, checkout: string): Promise<string[]> {
+  const filas = await rpc<Array<{ depto: string }>>('bananos_ocupadas', { p_desde: checkin, p_hasta: checkout });
+  const ocupadas = new Set(filas.map(f => (f.depto || '').toUpperCase()));
+  const libres = Object.keys(CABANAS).filter(c => !ocupadas.has(c));
+  // Restar los "sin asignar" de cada tipo
+  for (const tipo of ['big', 'te', 'tj'] as Tipo[]) {
+    let sinAsignar = filas.filter(f => f.depto === `SA_${tipo}`).length;
+    for (let i = libres.length - 1; i >= 0 && sinAsignar > 0; i--) {
+      if (CABANAS[libres[i]].tipo === tipo) {
+        libres.splice(i, 1);
+        sinAsignar--;
+      }
+    }
+  }
+  return libres;
+}
 
+// ---------------------------------------------------------------- Auth del personal
+async function usuarioDeToken(req: Request): Promise<{ id: string; rol: string } | null> {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!token) return null;
+  const r = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_ANON, Authorization: `Bearer ${token}` } });
+  if (!r.ok) return null;
+  const u: any = await r.json();
+  // El rol vive en la tabla bananos_usuarios: se consulta con el token del propio usuario
+  const rr = await fetch(`${SB_URL}/rest/v1/rpc/bananos_mi_rol`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SB_ANON, Authorization: `Bearer ${token}` },
+    body: '{}',
+  });
+  const rol = rr.ok ? await rr.json() : '';
+  return { id: u.id, rol: typeof rol === 'string' ? rol : '' };
+}
+
+function requiereStaff(roles: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const u = await usuarioDeToken(req);
+      if (!u || !roles.includes(u.rol)) return res.status(401).json({ error: 'Necesitás iniciar sesión.' });
+      (req as any).usuario = u;
+      next();
+    } catch {
+      res.status(401).json({ error: 'Necesitás iniciar sesión.' });
+    }
+  };
+}
+
+// ---------------------------------------------------------------- Límite simple por IP
+const visitas = new Map<string, number[]>();
+function limitePorIp(max: number, ventanaMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip || 'desconocida';
+    const ahora = Date.now();
+    const lista = (visitas.get(ip) || []).filter(t => ahora - t < ventanaMs);
+    if (lista.length >= max) {
+      return res.status(429).json({ error: 'Demasiados mensajes seguidos. Probá en unos minutos o escribinos por WhatsApp.' });
+    }
+    lista.push(ahora);
+    visitas.set(ip, lista);
+    if (visitas.size > 5000) visitas.clear();
+    next();
+  };
+}
+
+// ---------------------------------------------------------------- iCal de salida (para Airbnb / Booking)
+app.get('/api/ical/:cabinCode.ics', async (req, res) => {
+  const code = String(req.params.cabinCode || '').toUpperCase();
+  if (!CABANAS[code]) return res.status(404).send('Cabaña no válida');
+  try {
+    const filas = await rpc<Array<{ id: string; checkin: string; checkout: string; plataforma: string }>>('bananos_ical_feed', { p_depto: code });
+    const dtstamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Cabanas Los Bananos//Calendario iCal v2//ES',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      `X-WR-CALNAME:Los Bananos - ${CABANAS[code].nombre}`,
+      'X-WR-TIMEZONE:America/Argentina/Buenos_Aires',
+    ];
+    for (const r of filas) {
+      if (!FECHA.test(r.checkin) || !FECHA.test(r.checkout)) continue;
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:reserva-${r.id}@woodcabiniguazu.com.ar`,
+        `DTSTAMP:${dtstamp}`,
+        `DTSTART;VALUE=DATE:${r.checkin.replace(/-/g, '')}`,
+        `DTEND;VALUE=DATE:${r.checkout.replace(/-/g, '')}`,
+        `SUMMARY:${r.plataforma === 'Airbnb' ? 'Reserva Airbnb' : 'Reservado'}`,
+        'STATUS:CONFIRMED',
+        'TRANSP:OPAQUE',
+        'END:VEVENT'
+      );
+    }
+    lines.push('END:VCALENDAR');
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.status(200).send(lines.join('\r\n'));
+  } catch (e) {
+    console.error('Error generando iCal:', e);
+    res.status(500).send('Error interno');
+  }
+});
+
+// ---------------------------------------------------------------- Proxy iCal de entrada (solo personal logueado)
+const HOSTS_ICAL = [
+  'calendar.google.com',
+  'airbnb.com',
+  'airbnb.com.ar',
+  'airbnb.com.br',
+  'airbnb.es',
+  'booking.com',
+  ...(process.env.ICAL_HOSTS_EXTRA || '').split(',').map(h => h.trim()).filter(Boolean),
+];
+const hostPermitido = (host: string) => HOSTS_ICAL.some(h => host === h || host.endsWith('.' + h));
+
+app.get('/api/fetch-ical', requiereStaff(['admin', 'recepcion']), async (req, res) => {
+  const url = String(req.query.url || '').trim();
+  let destino: URL;
+  try {
+    destino = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'URL no válida' });
+  }
+  if (destino.protocol !== 'https:' || !hostPermitido(destino.hostname)) {
+    return res.status(400).json({ error: 'Solo se aceptan calendarios de Google Calendar, Airbnb o Booking (https).' });
+  }
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 15_000);
+    const r = await fetch(destino, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'LosBananosPMS/2.0', Accept: 'text/calendar, text/plain, */*' },
+    });
+    clearTimeout(t);
+    const final = new URL(r.url);
+    if (!hostPermitido(final.hostname)) return res.status(400).json({ error: 'El calendario redirigió a un sitio no permitido.' });
+    if (!r.ok) return res.status(502).json({ error: `El calendario respondió ${r.status}. ¿La URL secreta sigue vigente?` });
+    const texto = await r.text();
+    if (texto.length > 5_000_000) return res.status(413).json({ error: 'Calendario demasiado grande' });
+    if (!texto.includes('BEGIN:VCALENDAR')) return res.status(422).json({ error: 'La URL no devolvió un calendario iCal.' });
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.status(200).send(texto);
+  } catch (e: any) {
+    res.status(502).json({ error: e?.name === 'AbortError' ? 'El calendario tardó demasiado en responder.' : 'No se pudo descargar el calendario.' });
+  }
+});
+
+// ---------------------------------------------------------------- Reglas de Xenia (solo lectura)
+app.get('/api/xenia/rules', async (_req, res) => {
+  res.json({ rules: await reglasXenia(), cabanas: CABANAS });
+});
+app.post('/api/xenia/rules', (_req, res) => {
+  res.status(410).json({ error: 'Las reglas se editan desde la app (Xenia → Reglas), con sesión de propietario.' });
+});
+
+// ---------------------------------------------------------------- Herramientas de Xenia
+async function toolDisponibilidad(checkin: string, checkout: string, pax?: number) {
+  if (!FECHA.test(checkin) || !FECHA.test(checkout) || checkout <= checkin) {
+    return { error: 'Fechas inválidas. Usar YYYY-MM-DD y salida posterior a la llegada.' };
+  }
+  const reglas = await reglasXenia();
+  const libres = await cabanasLibres(checkin, checkout);
+  const detalle = libres.map(code => {
+    const tipo = CABANAS[code].tipo;
+    const cap = capacidad(reglas, tipo);
+    return { codigo: code, nombre: CABANAS[code].nombre, tipo, capacidadMax: cap.capacidadMax, aptaParaPax: pax ? pax <= cap.capacidadMax : true };
+  });
+  const aptas = pax ? detalle.filter(c => c.aptaParaPax) : detalle;
+  return { fechas: { checkin, checkout }, paxSolicitados: pax || 'no especificado', totalCabanasDisponibles: aptas.length, cabanasDisponibles: aptas };
+}
+
+async function toolCotizar(cabana: string, checkin: string, checkout: string, pax = 2, moneda: 'ARS' | 'USD' = 'ARS') {
+  const code = String(cabana || '').toUpperCase();
+  if (!CABANAS[code]) return { error: 'Cabaña inexistente' };
+  if (!FECHA.test(checkin) || !FECHA.test(checkout) || checkout <= checkin) return { error: 'Fechas inválidas' };
+  const reglas = await reglasXenia();
+  const tipo = CABANAS[code].tipo;
+  const t = reglas.tarifas?.[tipo] || {};
+  const precioNoche = numOrNull(moneda === 'USD' ? t.precioUSD : t.precioARS);
+  if (precioNoche === null || precioNoche <= 0) {
+    return { sinTarifa: true, mensaje: 'No hay tarifa cargada para esa cabaña/moneda: derivar a una persona para cotizar.' };
+  }
+  const plusNoche = numOrNull(moneda === 'USD' ? t.plusUSD : t.plusARS) ?? 0;
+  const cap = capacidad(reglas, tipo);
+  if (pax > cap.capacidadMax) return { error: `La cabaña admite hasta ${cap.capacidadMax} personas.` };
+  const noches = Math.round((Date.parse(checkout) - Date.parse(checkin)) / 86_400_000);
+  const extra = Math.max(0, pax - cap.paxBase);
+  const porNoche = precioNoche + extra * plusNoche;
+  const total = porNoche * noches;
+  const senaPct = Number(reglas.senaPorcentaje) || 50;
+  const sena = Math.round((total * senaPct) / 100);
   return {
-    cabana: info.nombre,
+    cabana: CABANAS[code].nombre,
     codigo: code,
     fechas: { checkin, checkout },
     noches,
     pasajeros: pax,
     moneda,
-    tarifaBaseNoche: precioNoche,
-    plusPasajeroExtraNoche: totalPlusNoche,
-    tarifaFinalPorNoche: subtotalPorNoche,
-    montoTotal,
-    señaRequeridaPorcentaje: `${xeniaRules.senaPorcentaje}%`,
-    montoSena,
-    saldoAlIngreso,
-    aliasTransferencia: xeniaRules.aliasBancario,
+    tarifaFinalPorNoche: porNoche,
+    montoTotal: total,
+    senaPorcentaje: senaPct,
+    montoSena: sena,
+    saldoAlIngreso: total - sena,
+    aliasTransferencia: reglas.aliasBancario || null,
   };
 }
 
-// Herramienta 3: Asentar reserva en el sistema
-async function toolAsentarReserva(args: {
-  huesped: string;
-  telefono: string;
-  cabana: string;
-  checkin: string;
-  checkout: string;
-  pax?: number;
-  notas?: string;
-  canal?: string;
-  moneda?: 'ARS' | 'USD';
-}) {
-  const code = (args.cabana || 'C5').toUpperCase();
-  const info = CABANAS_INFO[code] || CABANAS_INFO['C5'];
-  const moneda = args.moneda || 'ARS';
-  const pax = args.pax || info.paxBase;
-  const cotizacion = toolCotizarEstadia(code, args.checkin, args.checkout, pax, moneda);
+async function toolAsentar(args: any, canal: string) {
+  if (!SB_SERVICE) {
+    return { exito: false, guardadoEnBaseDeDatos: false, mensaje: 'El registro automático no está activado: tomá los datos y avisá que una persona confirma por WhatsApp.' };
+  }
+  const code = String(args.cabana || '').toUpperCase();
+  const huesped = String(args.huesped || '').trim().slice(0, 120);
+  const telefono = String(args.telefono || '').trim().slice(0, 40);
+  if (!CABANAS[code] || !huesped || !telefono) return { exito: false, error: 'Faltan datos (cabaña, nombre o teléfono).' };
+  const moneda: 'ARS' | 'USD' = args.moneda === 'USD' ? 'USD' : 'ARS';
+  const pax = Math.max(1, Math.min(12, Number(args.pax) || 2));
+  const cot: any = await toolCotizar(code, args.checkin, args.checkout, pax, moneda);
+  if (cot.error || cot.sinTarifa) return { exito: false, ...cot };
 
-  const reservaId = 'XN-' + Date.now().toString(36).toUpperCase();
-  const nuevaReserva = {
-    id: reservaId,
+  // Re-chequear disponibilidad justo antes de grabar
+  const libres = await cabanasLibres(args.checkin, args.checkout);
+  if (!libres.includes(code)) return { exito: false, error: 'Esa cabaña ya no está disponible para esas fechas.' };
+
+  const id = 'XN-' + Date.now().toString(36).toUpperCase() + crypto.randomBytes(2).toString('hex');
+  const plataforma = canal === 'instagram' ? 'Instagram' : 'Directo';
+  const nueva = {
+    id,
     depto: code,
-    huesped: args.huesped.trim(),
-    tel: args.telefono ? args.telefono.trim() : '',
-    checkin: args.checkin.trim(),
-    checkout: args.checkout.trim(),
-    precio: cotizacion.tarifaBaseNoche,
-    moneda: moneda,
-    pax: pax,
-    plus: cotizacion.plusPasajeroExtraNoche,
-    plataforma: args.canal || 'WhatsApp',
+    huesped,
+    tel: telefono,
+    checkin: args.checkin,
+    checkout: args.checkout,
+    precio: cot.tarifaFinalPorNoche, // ya incluye el plus por pasajeros extra
+    plus: 0,
+    pax,
+    plataforma,
     estado: 'Pendiente',
-    sena: cotizacion.montoSena,
-    saldo: cotizacion.saldoAlIngreso,
-    notas: `[Agente Xenia ${args.canal || 'Chat'}] ${args.notas || 'Reserva automática generada con confirmación del huésped'}. Seña pendiente: ${cotizacion.montoSena} ${moneda}`,
+    sena: 0,
+    saldo: 0,
+    notas: `[Xenia ${canal}] ${String(args.notas || '').slice(0, 300)} Seña pedida: ${cot.montoSena} ${moneda}.${moneda === 'USD' ? ' [USD]' : ''}`.trim(),
     creado: new Date().toISOString(),
   };
-
-  const guardadoEnSupabase = await insertSupabaseReserva(nuevaReserva);
-
+  const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SB_SERVICE, Authorization: `Bearer ${SB_SERVICE}`, Prefer: 'return=minimal' },
+    body: JSON.stringify(nueva),
+  });
+  if (!r.ok) {
+    console.error('Xenia no pudo grabar la reserva:', r.status, await r.text());
+    return { exito: false, guardadoEnBaseDeDatos: false, error: 'No se pudo registrar. Derivar a una persona.' };
+  }
   return {
     exito: true,
-    reservaId,
-    guardadoEnBaseDeDatos: guardadoEnSupabase,
-    reserva: nuevaReserva,
-    resumen: {
-      huesped: nuevaReserva.huesped,
-      cabana: info.nombre,
-      checkin: nuevaReserva.checkin,
-      checkout: nuevaReserva.checkout,
-      noches: cotizacion.noches,
-      total: cotizacion.montoTotal,
-      seña: cotizacion.montoSena,
-      moneda,
-      estado: 'Pendiente de seña (50%)',
-      instruccionesPago: `Transferir la seña al alias ${xeniaRules.aliasBancario} y enviar el comprobante para confirmar definitivamente.`,
-    },
+    guardadoEnBaseDeDatos: true,
+    reservaId: id,
+    reserva: nueva,
+    resumen: { ...cot, estado: 'Pendiente de seña', instruccionesPago: cot.aliasTransferencia ? `Transferir la seña al alias ${cot.aliasTransferencia} y mandar el comprobante.` : 'Una persona te pasa los datos para la seña.' },
   };
 }
 
-// Configuración y reglas de Xenia
-app.get('/api/xenia/rules', (req, res) => {
-  res.json({ rules: xeniaRules, cabanas: CABANAS_INFO });
-});
+function promptSistema(reglas: ReglasXenia, canal: string) {
+  const v = (x?: string) => (x && x.trim() ? x.trim() : null);
+  const lineas = [
+    `Sos Xenia, la anfitriona virtual de "Cabañas Los Bananos" (Wood Cabin Iguazú) en Puerto Iguazú, Misiones. Atendés por ${canal.toUpperCase()}.`,
+    'Respondé cálida y breve, en español rioplatense. Hoy es ' + new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }) + '.',
+    'REGLA DE ORO: nunca inventes datos (precios, servicios, cuentas bancarias, políticas). Si algo no figura abajo o una herramienta no lo devuelve, decí que lo confirma una persona' +
+      (v(reglas.contactoHumano) ? ` por WhatsApp al ${reglas.contactoHumano}` : '') + '.',
+    '',
+    'DATOS CARGADOS POR EL PROPIETARIO:',
+    `- Check-in desde las ${v(reglas.checkinTime) || '(no cargado)'} · Check-out hasta las ${v(reglas.checkoutTime) || '(no cargado)'}.`,
+    v(reglas.earlyCheckinInfo) ? `- ${reglas.earlyCheckinInfo}` : '',
+    v(reglas.politicaCancelacion) ? `- Cancelación: ${reglas.politicaCancelacion}` : '- Cancelación: (no cargada)',
+    v(reglas.politicaMascotas) ? `- Mascotas: ${reglas.politicaMascotas}` : '- Mascotas: (no cargado)',
+    v(reglas.serviciosIncluidos) ? `- Servicios: ${reglas.serviciosIncluidos}` : '- Servicios: (no cargado)',
+    reglas.senaPorcentaje ? `- Seña para confirmar: ${reglas.senaPorcentaje}%` : '',
+    v(reglas.aliasBancario) ? `- Alias para la seña: ${reglas.aliasBancario}` : '- Datos de pago: los pasa una persona',
+    v(reglas.cbu) ? `- CBU/CVU: ${reglas.cbu}` : '',
+    '',
+    'CABAÑAS: 2 y 3 (Big), 5, 6, 8 y 9 (Tiny), 7 (Tiny con jacuzzi, para parejas).',
+    '',
+    'HERRAMIENTAS:',
+    "1. Para disponibilidad, llamá a 'consultar_disponibilidad'.",
+    "2. Para precios, llamá a 'cotizar_estadia'. Si devuelve sinTarifa, NO des un precio: derivá a una persona.",
+    "3. SOLO llamá a 'asentar_reserva' si el huésped CONFIRMÓ explícitamente y tenés nombre, teléfono, cabaña y fechas. Queda PENDIENTE hasta que pague la seña. Si la herramienta no la guarda, decí que una persona la confirma.",
+  ];
+  return lineas.filter(l => l !== '').join('\n');
+}
 
-app.post('/api/xenia/rules', (req, res) => {
-  const newRules = req.body;
-  xeniaRules = { ...xeniaRules, ...newRules };
-  res.json({ ok: true, rules: xeniaRules });
-});
+const herramientas: any = [
+  {
+    functionDeclarations: [
+      {
+        name: 'consultar_disponibilidad',
+        description: 'Cabañas libres entre dos fechas, filtradas por cantidad de huéspedes.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            checkin: { type: Type.STRING, description: 'YYYY-MM-DD' },
+            checkout: { type: Type.STRING, description: 'YYYY-MM-DD' },
+            pax: { type: Type.NUMBER, description: 'Cantidad de huéspedes (opcional)' },
+          },
+          required: ['checkin', 'checkout'],
+        },
+      },
+      {
+        name: 'cotizar_estadia',
+        description: 'Presupuesto con las tarifas cargadas por el propietario. Puede devolver sinTarifa.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            cabana: { type: Type.STRING, description: 'C2, C3, C5, C6, C7, C8 o C9' },
+            checkin: { type: Type.STRING },
+            checkout: { type: Type.STRING },
+            pax: { type: Type.NUMBER },
+            moneda: { type: Type.STRING, description: 'ARS o USD' },
+          },
+          required: ['cabana', 'checkin', 'checkout'],
+        },
+      },
+      {
+        name: 'asentar_reserva',
+        description: 'Registra una reserva PENDIENTE de seña. Solo con confirmación explícita del huésped.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            huesped: { type: Type.STRING },
+            telefono: { type: Type.STRING },
+            cabana: { type: Type.STRING },
+            checkin: { type: Type.STRING },
+            checkout: { type: Type.STRING },
+            pax: { type: Type.NUMBER },
+            notas: { type: Type.STRING },
+            moneda: { type: Type.STRING },
+          },
+          required: ['huesped', 'telefono', 'cabana', 'checkin', 'checkout'],
+        },
+      },
+    ],
+  },
+];
 
-// Endpoint principal: Chat del Agente Xenia (para WhatsApp, Instagram o Landing Web)
-app.post('/api/xenia/chat', async (req, res) => {
-  const { message, history = [], channel = 'web', guestName, guestPhone } = req.body;
-
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'Mensaje requerido' });
+async function ejecutarHerramienta(nombre: string, args: any, canal: string) {
+  try {
+    if (nombre === 'consultar_disponibilidad') return await toolDisponibilidad(args.checkin, args.checkout, args.pax);
+    if (nombre === 'cotizar_estadia') return await toolCotizar(args.cabana, args.checkin, args.checkout, args.pax, args.moneda === 'USD' ? 'USD' : 'ARS');
+    if (nombre === 'asentar_reserva') return await toolAsentar(args, canal);
+  } catch (e: any) {
+    console.error(`Error en herramienta ${nombre}:`, e);
+    return { error: 'No se pudo consultar ahora.' };
   }
+  return { error: 'Herramienta desconocida' };
+}
 
+const conTimeout = <T,>(p: Promise<T>, ms: number) =>
+  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+
+// ---------------------------------------------------------------- Chat de Xenia (web / landing / guía)
+app.post('/api/xenia/chat', limitePorIp(20, 10 * 60_000), async (req, res) => {
+  const { message, history = [], channel = 'web' } = req.body || {};
+  if (!message || typeof message !== 'string' || message.length > 1000) {
+    return res.status(400).json({ error: 'Mensaje requerido (máx. 1000 caracteres)' });
+  }
+  const canal = ['web', 'whatsapp', 'instagram'].includes(channel) ? channel : 'web';
   const toolExecutions: Array<{ name: string; args: any; result: any }> = [];
   let reservaCreada: any = null;
+  let guardado = false;
 
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    try {
       const ai = new GoogleGenAI({ apiKey });
+      const reglas = await reglasXenia();
+      const contents: any[] = (Array.isArray(history) ? history : [])
+        .slice(-8)
+        .filter((h: any) => h && typeof h.text === 'string')
+        .map((h: any) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text.slice(0, 1000) }] }));
+      contents.push({ role: 'user', parts: [{ text: message }] });
+      const config = { systemInstruction: promptSistema(reglas, canal), tools: herramientas };
 
-      const systemInstruction = `Sos Xenia, la anfitriona y agente virtual oficial de "Cabañas Los Bananos" en Puerto Iguazú, Misiones.
-Tu rol es atender a futuros huéspedes que escriben por ${channel.toUpperCase()} de manera cordial, cálida, profesional y alegre con acento argentino/misionero sutil.
-Podés interpretar mensajes informales, calcular fechas exactas (hoy es ${new Date().toISOString().split('T')[0]}), resolver dudas de la guía y usar tus HERRAMIENTAS estrictamente cuando corresponda.
-
-REGLAS DE NEGOCIO Y GUÍA DE LOS BANANOS:
-- Ubicación: Puerto Iguazú, Misiones (cerca de Cataratas y selva).
-- Horarios: Check-in a partir de las ${xeniaRules.checkinTime} hs. Check-out hasta las ${xeniaRules.checkoutTime} hs.
-- ${xeniaRules.earlyCheckinInfo}
-- Políticas de Seña y Cancelación: Se requiere el ${xeniaRules.senaPorcentaje}% de seña para confirmar la reserva. ${xeniaRules.politicaCancelacion}
-- Mascotas: ${xeniaRules.politicaMascotas}
-- Servicios y comodidades: ${xeniaRules.serviciosIncluidos}
-- Pagos: ${xeniaRules.formasPago}. Alias: ${xeniaRules.aliasBancario}. CBU: ${xeniaRules.cbu}.
-
-NUESTRAS CABAÑAS:
-- Cabaña 2 y 3 (Big): capacidad de 4 a 6 personas.
-- Cabaña 7 (Tiny Jacuzzi): exclusiva parejas, 2 personas, hidromasaje privado en el deck.
-- Cabañas 5, 6, 8 y 9 (Tiny): 2 a 4 personas.
-
-LAS 6 PLANTILLAS INTELIGENTES DE WHATSAPP Y BLINDAJE ANTI-QUEJAS:
-1. tpl-1: Confirmación y Bienvenida Anticipada (Día 1) -> Bienvenida en plural de cortesía con link a la Guía Digital.
-2. tpl-5: Coordinación en Ruta / Día de Viaje -> Para coordinar demoras y pedir ubicación en tiempo real 30-40 min antes.
-3. tpl-2: Instrucciones de Auto Check-in y Clave Wi-Fi -> Ubicación GPS, código de cerradura/llave y clave Wi-Fi.
-4. tpl-6: Control de Confort (2hs Post-Ingreso) - Blindaje Anti-Quejas -> Para chequear que todo esté impecable (aire, agua caliente, toallas) y resolver cualquier detalle en privado antes de que se transforme en una mala reseña.
-5. tpl-3: Recordatorio de Check-out Amable -> Noche anterior a las 20hs para recordar salida 10hs y organizar mucamas.
-6. tpl-4: Solicitud de Reseña 5 Estrellas y Descuento Directo -> 2hs post-salida con código BANANOS10 (10% off directo).
-Si el usuario pregunta para qué sirven las plantillas de WhatsApp o qué es el blindaje anti-quejas, explicáselo en detalle y con claridad.
-
-POLÍTICA DE INVOCACIÓN DE HERRAMIENTAS:
-1. Si el huésped consulta disponibilidad para ciertas fechas o cantidad de personas, LLAMÁ a 'consultar_disponibilidad'.
-2. Si quiere saber el precio exacto o cotización para una cabaña, LLAMÁ a 'cotizar_estadia'.
-3. CRÍTICO: SOLO llamá a 'asentar_reserva' cuando el huésped haya CONFIRMADO EXPLÍCITAMENTE que quiere reservar, y se cuente con su nombre, teléfono y fechas definidas. Si faltan datos, pedíselos amablemente sin inventar.`;
-
-      const toolsConfig: any = [
-        {
-          functionDeclarations: [
-            {
-              name: 'consultar_disponibilidad',
-              description: 'Consulta cabañas libres en Los Bananos entre dos fechas y filtra por cantidad de huéspedes.',
-              parameters: {
-                type: Type.OBJECT,
-                properties: {
-                  checkin: { type: Type.STRING, description: 'Fecha de check-in en formato YYYY-MM-DD' },
-                  checkout: { type: Type.STRING, description: 'Fecha de check-out en formato YYYY-MM-DD' },
-                  pax: { type: Type.NUMBER, description: 'Cantidad total de huéspedes (opcional)' },
-                },
-                required: ['checkin', 'checkout'],
-              },
-            },
-            {
-              name: 'cotizar_estadia',
-              description: 'Calcula el presupuesto exacto, noches, tarifa por noche, monto de seña (50%) y saldo al ingreso.',
-              parameters: {
-                type: Type.OBJECT,
-                properties: {
-                  cabana: { type: Type.STRING, description: 'Código de la cabaña (C2, C3, C5, C6, C7, C8, C9)' },
-                  checkin: { type: Type.STRING, description: 'Fecha de check-in YYYY-MM-DD' },
-                  checkout: { type: Type.STRING, description: 'Fecha de check-out YYYY-MM-DD' },
-                  pax: { type: Type.NUMBER, description: 'Cantidad de personas' },
-                  moneda: { type: Type.STRING, description: 'Moneda preferida: ARS o USD' },
-                },
-                required: ['cabana', 'checkin', 'checkout'],
-              },
-            },
-            {
-              name: 'asentar_reserva',
-              description: 'Registra y bloquea una reserva en el calendario oficial de Los Bananos. Solo llamar cuando el huésped confirmó explícitamente.',
-              parameters: {
-                type: Type.OBJECT,
-                properties: {
-                  huesped: { type: Type.STRING, description: 'Nombre y apellido del huésped' },
-                  telefono: { type: Type.STRING, description: 'Número de WhatsApp o teléfono del huésped' },
-                  cabana: { type: Type.STRING, description: 'Código de cabaña elegida (C2, C3, C5, C6, C7, C8, C9)' },
-                  checkin: { type: Type.STRING, description: 'Fecha de ingreso YYYY-MM-DD' },
-                  checkout: { type: Type.STRING, description: 'Fecha de egreso YYYY-MM-DD' },
-                  pax: { type: Type.NUMBER, description: 'Cantidad de personas' },
-                  notas: { type: Type.STRING, description: 'Aclaraciones, mascota o pedidos' },
-                  moneda: { type: Type.STRING, description: 'Moneda: ARS o USD' },
-                  canal: { type: Type.STRING, description: 'Canal de origen (WhatsApp, Instagram, Web)' },
-                },
-                required: ['huesped', 'telefono', 'cabana', 'checkin', 'checkout'],
-              },
-            },
-          ],
-        },
-      ];
-
-      // Formatear historial para Gemini
-      const formattedContents: any[] = [];
-      for (const h of history.slice(-8)) {
-        formattedContents.push({
-          role: h.role === 'user' ? 'user' : 'model',
-          parts: [{ text: h.text }],
-        });
-      }
-      formattedContents.push({
-        role: 'user',
-        parts: [{ text: message }],
-      });
-
-      // Helper para evitar que la llamada a Gemini se cuelgue si la red demora
-      const withTimeout = <T>(promise: Promise<T>, ms = 4500): Promise<T> => {
-        return Promise.race([
-          promise,
-          new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), ms)),
-        ]);
-      };
-
-      // Primer llamado a Gemini
-      let geminiRes = await withTimeout(
-        ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: formattedContents,
-          config: {
-            systemInstruction,
-            tools: toolsConfig,
-          },
-        })
-      );
-
-      // Si Gemini decide llamar a herramientas (Function Calling)
-      let candidate = geminiRes.candidates?.[0];
-      let functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall)?.map((p: any) => p.functionCall);
-
-      let loopLimit = 3;
-      while (functionCalls && functionCalls.length > 0 && loopLimit > 0) {
-        loopLimit--;
-        const toolResponsesParts: any[] = [];
-
-        for (const fc of functionCalls) {
-          const fnName = fc.name;
-          const fnArgs = fc.args || {};
-          let resultData: any = null;
-
-          if (fnName === 'consultar_disponibilidad') {
-            resultData = await toolConsultarDisponibilidad(fnArgs.checkin, fnArgs.checkout, fnArgs.pax);
-          } else if (fnName === 'cotizar_estadia') {
-            resultData = toolCotizarEstadia(fnArgs.cabana, fnArgs.checkin, fnArgs.checkout, fnArgs.pax, fnArgs.moneda);
-          } else if (fnName === 'asentar_reserva') {
-            resultData = await toolAsentarReserva({
-              ...fnArgs,
-              canal: fnArgs.canal || channel,
-            });
-            reservaCreada = resultData.reserva;
+      let resp = await conTimeout(ai.models.generateContent({ model: GEMINI_MODEL, contents, config }), 15_000);
+      let cand: any = resp.candidates?.[0];
+      let llamadas = cand?.content?.parts?.filter((p: any) => p.functionCall).map((p: any) => p.functionCall) || [];
+      let vueltas = 3;
+      while (llamadas.length && vueltas-- > 0) {
+        const respuestas: any[] = [];
+        for (const fc of llamadas) {
+          const resultado: any = await ejecutarHerramienta(fc.name, fc.args || {}, canal);
+          toolExecutions.push({ name: fc.name, args: fc.args, result: resultado });
+          if (fc.name === 'asentar_reserva' && resultado?.guardadoEnBaseDeDatos) {
+            reservaCreada = resultado.reserva;
+            guardado = true;
           }
-
-          toolExecutions.push({ name: fnName, args: fnArgs, result: resultData });
-
-          toolResponsesParts.push({
-            functionResponse: {
-              name: fnName,
-              response: { result: resultData },
-            },
-          });
+          respuestas.push({ functionResponse: { name: fc.name, response: { result: resultado } } });
         }
-
-        // Agregar el turno del modelo con sus llamados a funciones
-        if (candidate?.content) {
-          formattedContents.push(candidate.content);
-        }
-        // Agregar la respuesta de las herramientas
-        formattedContents.push({
-          role: 'user',
-          parts: toolResponsesParts,
-        });
-
-        // Volver a llamar a Gemini para que elabore la respuesta natural al huésped
-        geminiRes = await withTimeout(
-          ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: formattedContents,
-            config: {
-              systemInstruction,
-              tools: toolsConfig,
-            },
-          })
-        );
-
-        candidate = geminiRes.candidates?.[0];
-        functionCalls = candidate?.content?.parts?.filter((p: any) => p.functionCall)?.map((p: any) => p.functionCall);
+        if (cand?.content) contents.push(cand.content);
+        contents.push({ role: 'user', parts: respuestas });
+        resp = await conTimeout(ai.models.generateContent({ model: GEMINI_MODEL, contents, config }), 15_000);
+        cand = resp.candidates?.[0];
+        llamadas = cand?.content?.parts?.filter((p: any) => p.functionCall).map((p: any) => p.functionCall) || [];
       }
-
-      const replyText = geminiRes.text || '¡Hola! En Los Bananos estamos a tu disposición. ¿En qué fechas tenías pensado visitarnos?';
-
       return res.json({
-        reply: replyText,
+        reply: resp.text || '¡Hola! ¿Para qué fechas y cuántas personas serían?',
         toolExecutions,
         reservaCreada,
-        source: 'gemini-3.8-flash',
+        guardadoEnBaseDeDatos: guardado,
+        source: GEMINI_MODEL,
+      });
+    } catch (e) {
+      console.error('Error con Gemini:', e);
+    }
+  }
+
+  // Respaldo sin IA: respuestas solo con datos cargados (nada inventado)
+  const reglas = await reglasXenia();
+  const q = message.toLowerCase();
+  let reply = '¡Hola! Gracias por escribir a Cabañas Los Bananos 🌿 ¿Para qué fechas y cuántas personas serían?';
+  if (/check.?in|check.?out|horario|hora/.test(q) && reglas.checkinTime) {
+    reply = `El ingreso es a partir de las ${reglas.checkinTime} hs y la salida hasta las ${reglas.checkoutTime || '—'} hs.`;
+  } else if (/perro|mascota|gato/.test(q) && reglas.politicaMascotas) {
+    reply = reglas.politicaMascotas;
+  } else if (/cancel|seña|pago/.test(q) && reglas.politicaCancelacion) {
+    reply = reglas.politicaCancelacion;
+  }
+  if (reglas.contactoHumano) reply += ` Para reservar escribinos por WhatsApp al ${reglas.contactoHumano}.`;
+  res.json({ reply, toolExecutions, reservaCreada: null, guardadoEnBaseDeDatos: false, source: 'respaldo' });
+});
+
+// ---------------------------------------------------------------- Webhook de Meta (WhatsApp / Instagram)
+app.get('/api/webhook/meta', (req, res) => {
+  const esperado = process.env.META_VERIFY_TOKEN;
+  if (esperado && req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === esperado) {
+    return res.status(200).send(String(req.query['hub.challenge'] || ''));
+  }
+  res.status(403).send('Forbidden');
+});
+
+function firmaMetaValida(req: any): boolean {
+  const secreto = process.env.META_APP_SECRET;
+  const firma = String(req.headers['x-hub-signature-256'] || '');
+  if (!secreto || !firma.startsWith('sha256=') || !req.rawBody) return false;
+  const esperada = 'sha256=' + crypto.createHmac('sha256', secreto).update(req.rawBody).digest('hex');
+  const a = Buffer.from(firma);
+  const b = Buffer.from(esperada);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+app.post('/api/webhook/meta', async (req: any, res) => {
+  res.status(200).send('EVENT_RECEIVED');
+  // Sin firma válida no se responde nada (si no, cualquiera podría hacer que mandemos WhatsApps)
+  if (!firmaMetaValida(req)) {
+    console.warn('[Meta Webhook] Evento ignorado: firma inválida o META_APP_SECRET no configurado');
+    return;
+  }
+  try {
+    const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    const texto = msg?.text?.body;
+    if (!texto) return;
+    const desde = String(msg.from || '');
+    const canal = req.body.object === 'instagram' ? 'instagram' : 'whatsapp';
+    const reglas = await reglasXenia();
+    let reply = '¡Hola! Gracias por escribir a Cabañas Los Bananos. ¿Para qué fechas y cuántas personas?';
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const r = await conTimeout(
+          ai.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: [{ role: 'user', parts: [{ text: String(texto).slice(0, 1000) }] }],
+            config: { systemInstruction: promptSistema(reglas, canal) },
+          }),
+          15_000
+        );
+        if (r.text) reply = r.text;
+      } catch (e) {
+        console.warn('[Meta Webhook] Gemini falló, respuesta por defecto');
+      }
+    }
+    const token = process.env.META_ACCESS_TOKEN;
+    const phoneId = process.env.META_PHONE_NUMBER_ID;
+    if (token && phoneId && canal === 'whatsapp') {
+      await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to: desde, type: 'text', text: { body: reply } }),
       });
     }
-  } catch (err: any) {
-    console.error('Error invocando Gemini API en Xenia:', err);
-  }
-
-  // Motor Heurístico Resiliente (Fallback inteligente si no hay API key o hay error de red)
-  const qLower = message.toLowerCase();
-  let botReply = '';
-
-  if (qLower.includes('check in') || qLower.includes('check-in') || qLower.includes('horario') || qLower.includes('hora')) {
-    botReply = `¡Hola! Nuestro horario de ingreso (check-in) es a partir de las ${xeniaRules.checkinTime} hs y la salida (check-out) es hasta las ${xeniaRules.checkoutTime} hs para que el equipo pueda dejar la cabaña impecable. ${xeniaRules.earlyCheckinInfo}`;
-  } else if (qLower.includes('perro') || qLower.includes('mascota') || qLower.includes('gato')) {
-    botReply = `¡Sí! ${xeniaRules.politicaMascotas} 🐾 ¿Cuántos viajarían y qué tamaño tiene?`;
-  } else if (qLower.includes('cancel') || qLower.includes('seña') || qLower.includes('pago')) {
-    botReply = `Para confirmar una estadía solicitamos el ${xeniaRules.senaPorcentaje}% de seña por transferencia bancaria (Alias: ${xeniaRules.aliasBancario}). ${xeniaRules.politicaCancelacion}`;
-  } else {
-    // Simular consulta de disponibilidad básica
-    const mockDisp = await toolConsultarDisponibilidad('2026-10-10', '2026-10-12', 2);
-    toolExecutions.push({
-      name: 'consultar_disponibilidad',
-      args: { checkin: '2026-10-10', checkout: '2026-10-12', pax: 2 },
-      result: mockDisp,
-    });
-    botReply = `¡Hola! Qué lindo que quieras venir a Los Bananos 🍍🌿 Tenemos cabañas para parejas con jacuzzi privado (Cabaña 7) y opciones familiares de hasta 6 personas (Cabañas Big y Tiny). ¿Para qué fechas estás buscando y cuántas personas serían?`;
-  }
-
-  return res.json({
-    reply: botReply,
-    toolExecutions,
-    reservaCreada: null,
-    source: 'heuristic-fallback',
-  });
-});
-
-// Webhook de Meta (WhatsApp Business Cloud API e Instagram Direct)
-// 1. Verificación GET
-app.get('/api/webhook/meta', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-  const expectedToken = process.env.META_VERIFY_TOKEN || 'bananos_xenia_secret_2026';
-
-  if (mode === 'subscribe' && token === expectedToken) {
-    console.log('[Meta Webhook] Verificado con éxito');
-    return res.status(200).send(challenge);
-  }
-  return res.status(403).send('Forbidden: Token mismatch');
-});
-
-// 2. Recepción de mensajes POST (WhatsApp / Instagram)
-app.post('/api/webhook/meta', async (req, res) => {
-  const body = req.body;
-  console.log('[Meta Webhook] Evento recibido:', JSON.stringify(body).slice(0, 200));
-
-  // Responder 200 OK inmediatamente a Meta para cumplir el SLA
-  res.status(200).send('EVENT_RECEIVED');
-
-  // Procesamiento asíncrono
-  try {
-    const entry = body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const message = value?.messages?.[0];
-
-    if (message && message.text?.body) {
-      const fromPhone = message.from;
-      const text = message.text.body;
-      const channel = body.object === 'instagram' ? 'instagram' : 'whatsapp';
-
-      console.log(`[Xenia ${channel.toUpperCase()}] Mensaje entrante de ${fromPhone}: "${text}"`);
-
-      // Procesar con Xenia AI
-      let replyText = '¡Hola! Gracias por comunicarte con Cabañas Los Bananos en Puerto Iguazú. ¿En qué fechas tenías pensado visitarnos y para cuántas personas?';
-      
-      try {
-        if (process.env.GEMINI_API_KEY) {
-          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-          const geminiRes = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: [{ role: 'user', parts: [{ text }] }],
-            config: {
-              systemInstruction: `Sos Xenia, la Asistente Virtual Oficial de Cabañas Los Bananos en Puerto Iguazú. El huésped te escribe por ${channel} desde el teléfono ${fromPhone}. Responde de forma cálida, profesional y orientada a confirmar la estadía.`,
-            },
-          });
-          if (geminiRes.text) {
-            replyText = geminiRes.text;
-          }
-        }
-      } catch (aiErr) {
-        console.warn('[Xenia Webhook AI] Fallback a respuesta predeterminada:', aiErr);
-      }
-
-      // Enviar respuesta real saliente si las credenciales de Meta están configuradas
-      const metaToken = process.env.META_ACCESS_TOKEN;
-      const phoneId = process.env.META_PHONE_NUMBER_ID;
-
-      if (metaToken && phoneId && channel === 'whatsapp') {
-        try {
-          const resMeta = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${metaToken}`,
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              recipient_type: 'individual',
-              to: fromPhone,
-              type: 'text',
-              text: { preview_url: true, body: replyText },
-            }),
-          });
-          const metaData = await resMeta.json();
-          console.log('[Xenia WhatsApp Outbound] Respuesta enviada:', metaData);
-        } catch (sendErr) {
-          console.error('[Xenia WhatsApp Outbound] Error enviando mensaje a WhatsApp:', sendErr);
-        }
-      } else {
-        console.log(`[Xenia Simulación] Respuesta lista para ${fromPhone}: "${replyText.slice(0, 100)}..." (Para envío real configure META_ACCESS_TOKEN y META_PHONE_NUMBER_ID)`);
-      }
-    }
-  } catch (err) {
-    console.error('Error procesando webhook de Meta:', err);
+  } catch (e) {
+    console.error('[Meta Webhook] Error:', e);
   }
 });
 
-// Middleware Vite para desarrollo
+// ---------------------------------------------------------------- Front
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    // No servir el propio código del servidor ni sus mapas
+    app.use((req, res, next) => (/^\/server\.cjs/.test(req.path) ? res.status(404).end() : next()));
+    app.use(express.static(distPath, { index: 'index.html' }));
+    app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
+  app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en http://0.0.0.0:${PORT}`));
 }
 
 startServer();

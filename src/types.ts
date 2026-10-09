@@ -37,7 +37,10 @@ export interface Reserva {
   creado?: string;
   limpio?: boolean;
   comision?: number | null; // e.g. 15 or 3 for Airbnb
-  icalUid?: string; // Flag for iCal blocked slots
+  icalUid?: string; // Marca de "bloqueo iCal" (solo se completa si la fila es un bloqueo automático)
+  icalRef?: string; // UID del evento externo (columna ical_uid): vincula la fila con Airbnb/Booking/Google
+  origen?: string; // Feed de origen (columna origen), ej: 'airbnb:C5', 'google:general'
+  actualizado?: string;
 }
 
 export interface Gasto {

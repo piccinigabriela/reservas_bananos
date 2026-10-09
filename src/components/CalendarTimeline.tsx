@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { hoyIso, isoLocal } from '../services/fechas';
 import { Reserva, CabinCode, CabinType, VolunteerTask, VolunteerId, CabinCleaningStatus, CabinStatusInfo, CalendarColorMode } from '../types';
 import { 
   CABANAS, 
@@ -41,6 +42,7 @@ import {
   Brush
 } from 'lucide-react';
 import { calcFinancials, formatMoney } from '../services/cabinConfig';
+import { estaActiva, detectarConflictos } from '../services/reservaUtils';
 
 export type ZoomDensity = 'compact' | 'normal' | 'spacious';
 
@@ -82,7 +84,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   defaultColorMode,
 }) => {
   const today = new Date();
-  const todayIso = today.toISOString().split('T')[0];
+  const todayIso = hoyIso();
   const [viewType, setViewType] = useState<'mes' | 'semana'>('mes');
   const [zoomDensity, setZoomDensity] = useState<ZoomDensity>('normal');
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth());
@@ -167,21 +169,21 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
           iso,
           dow: dateObj.getDay(),
           isWeekend: dateObj.getDay() === 0 || dateObj.getDay() === 6,
-          isToday: iso === today.toISOString().split('T')[0],
+          isToday: iso === hoyIso(),
         };
       });
     } else {
       return Array.from({ length: 7 }, (_, i) => {
         const d = new Date(weekStartDate);
         d.setDate(d.getDate() + i);
-        const iso = d.toISOString().split('T')[0];
+        const iso = isoLocal(d);
         return {
           dayNum: d.getDate(),
           dateObj: d,
           iso,
           dow: d.getDay(),
           isWeekend: d.getDay() === 0 || d.getDay() === 6,
-          isToday: iso === today.toISOString().split('T')[0],
+          isToday: iso === hoyIso(),
         };
       });
     }
@@ -213,10 +215,13 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   const occupancyMap = useMemo(() => {
     const map: Record<string, Record<string, Reserva>> = {};
     const checkoutsMap: Record<string, Record<string, Reserva>> = {};
+    // Todas las reservas activas por noche: si hay más de una, es una superposición (antes se tapaban entre sí)
+    const dobles: Record<string, Record<string, Reserva[]>> = {};
 
     activeCabins.forEach(c => {
       map[c] = {};
       checkoutsMap[c] = {};
+      dobles[c] = {};
     });
 
     reservas.forEach(r => {
@@ -230,13 +235,16 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
         if (map[r.depto]) {
           map[r.depto][iso] = r;
         }
+        if (dobles[r.depto] && estaActiva(r)) {
+          (dobles[r.depto][iso] = dobles[r.depto][iso] || []).push(r);
+        }
       }
       if (checkoutsMap[r.depto]) {
         checkoutsMap[r.depto][r.checkout] = r;
       }
     });
 
-    return { occupied: map, checkouts: checkoutsMap };
+    return { occupied: map, checkouts: checkoutsMap, dobles };
   }, [activeCabins, reservas]);
 
   const monthNames = [
@@ -245,6 +253,21 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   ];
   const dowNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
+  // Al abrir (sobre todo en el celular) mostrar HOY y no el día 1 del mes
+  const contenedorRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const cont = contenedorRef.current;
+    if (!cont) return;
+    const th = cont.querySelector<HTMLElement>('th[data-hoy="si"]');
+    const primera = cont.querySelector<HTMLElement>('thead th');
+    if (th) cont.scrollLeft = Math.max(0, th.offsetLeft - (primera?.offsetWidth || 0) - 4);
+    else cont.scrollLeft = 0;
+  }, [viewType, selectedMonth, selectedYear, weekStartDate, zoomDensity]);
+
+  // Superposiciones y huéspedes repetidos desde hoy en adelante
+  const conflictos = useMemo(() => detectarConflictos(reservas, hoyIso()), [reservas]);
+  const [verConflictos, setVerConflictos] = useState(false);
+
   // Reservas pendientes de asignación de cabaña física
   const pendingAssignment = useMemo(() => {
     return reservas.filter(r => esSinAsignar(r.depto) && r.estado !== 'Cancelada' && r.estado !== 'Non show');
@@ -252,6 +275,40 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
 
   return (
     <div className="space-y-4">
+      {conflictos.length > 0 && !isVoluntarioView && (
+        <div className={`rounded-xl border p-3 sm:p-4 ${isDarkMode ? 'bg-red-950/40 border-red-800 text-red-200' : 'bg-red-50 border-red-300 text-red-900'}`}>
+          <button type="button" onClick={() => setVerConflictos(v => !v)} className="w-full flex items-center justify-between gap-3 text-left">
+            <span className="font-bold text-sm sm:text-base">
+              ⚠ {conflictos.length} {conflictos.length === 1 ? 'posible duplicado o superposición' : 'posibles duplicados o superposiciones'} desde hoy
+            </span>
+            <span className="text-xs font-bold underline shrink-0">{verConflictos ? 'Ocultar' : 'Ver'}</span>
+          </button>
+          {verConflictos && (
+            <ul className="mt-3 space-y-2 text-xs sm:text-sm">
+              {conflictos.slice(0, 40).map((c, i) => (
+                <li key={i} className={`rounded-lg p-2 ${isDarkMode ? 'bg-black/20' : 'bg-white/70'}`}>
+                  <div className="font-semibold mb-1">
+                    {c.tipo === 'misma_cabana' ? `Superposición en ${DN[c.a.depto] || c.a.depto}` : 'Mismo huésped en dos cabañas'}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[c.a, c.b].map(r => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => onSelectReserva(r)}
+                        className={`px-2 py-1 rounded-md border font-semibold ${isDarkMode ? 'border-red-700 hover:bg-red-900/40' : 'border-red-300 hover:bg-red-100'}`}
+                      >
+                        {SHORT_DN[r.depto] || r.depto} · {r.huesped} · {formatDateEs(r.checkin)}→{formatDateEs(r.checkout)} · {r.plataforma}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Alerta si hay reservas de Booking sin asignar cabaña */}
       {pendingAssignment.length > 0 && (
         <div className="bg-amber-500/15 border border-amber-500/40 rounded-xl p-3 sm:p-4 flex items-center justify-between gap-3 shadow-xs">
@@ -260,10 +317,10 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
               ⏳
             </div>
             <div>
-              <div className="font-bold text-amber-400 text-sm sm:text-base">
+              <div className={`font-bold text-sm sm:text-base ${isDarkMode ? 'text-amber-400' : 'text-amber-900'}`}>
                 Hay {pendingAssignment.length} reserva{pendingAssignment.length > 1 ? 's' : ''} pendiente{pendingAssignment.length > 1 ? 's' : ''} de asignar cabaña física
               </div>
-              <div className="text-xs text-amber-300/80">
+              <div className={`text-xs ${isDarkMode ? 'text-amber-300/80' : 'text-amber-800'}`}>
                 Booking vendió por tipo de cabaña. Tocá para asignar cuál cabaña concreta le corresponde.
               </div>
             </div>
@@ -294,7 +351,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                   : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
               }`}
             >
-              Vista Mes
+              Mes
             </button>
             <button
               onClick={() => setViewType('semana')}
@@ -304,13 +361,13 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                   : isDarkMode ? 'text-[#94A3B8] hover:text-white' : 'text-[#64748B] hover:text-[#0F172A]'
               }`}
             >
-              Vista Semana (7 días amplios)
+              Semana
             </button>
           </div>
 
           {/* Control de Zoom / Densidad para Tablet y Desktop */}
           {viewType === 'mes' && (
-            <div className={`flex items-center gap-1 p-1 rounded-lg border ${
+            <div className={`hidden sm:flex items-center gap-1 p-1 rounded-lg border ${
               isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-[#F1F5F9] border-[#CBD5E1]'
             }`} title="Ajuste de Zoom para Tablet">
               <span className={`text-[11px] font-semibold px-1.5 hidden sm:inline ${
@@ -400,7 +457,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          <div className={`px-4 py-1.5 border rounded-lg text-center min-w-[180px] shadow-xs ${
+          <div className={`px-4 py-1.5 border rounded-lg text-center min-w-[140px] sm:min-w-[180px] shadow-xs ${
             isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-white border-[#CBD5E1]'
           }`}>
             <span className={`font-bold text-sm sm:text-base block leading-tight ${
@@ -483,7 +540,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
       <div className={`border rounded-xl shadow-md transition-colors ${
         isDarkMode ? 'bg-[#12151A] border-[#2D3540]' : 'bg-white border-[#CBD5E1]'
       }`}>
-        <div className="overflow-x-auto max-h-[75vh] overflow-y-auto scrollbar-thin relative rounded-xl">
+        <div ref={contenedorRef} className="overflow-x-auto max-h-[75dvh] overflow-y-auto scrollbar-thin relative rounded-xl">
           <table className="w-full border-separate border-spacing-0 select-none">
             <thead className="sticky top-0 z-30 shadow-md">
               <tr className={isDarkMode ? 'bg-[#0E1013] text-[#94A3B8]' : 'bg-[#1E293B] text-[#F1F5F9]'}>
@@ -506,6 +563,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                   return (
                     <th
                       key={d.iso}
+                      data-hoy={d.isToday ? 'si' : undefined}
                       className={`sticky top-0 z-30 px-0.5 sm:px-1 py-1.5 sm:py-2 text-center text-xs font-semibold border-b border-r shadow-[0_2px_4px_rgba(0,0,0,0.15)] ${colWidthClass} ${
                         isDarkMode ? 'border-[#242A33]' : 'border-[#334155]'
                       } ${
@@ -517,7 +575,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       }`}
                     >
                       <span className={`block font-normal opacity-75 ${
-                        zoomDensity === 'compact' ? 'text-[8px] sm:text-[9px]' : 'text-[10px]'
+                        zoomDensity === 'compact' ? 'text-[10px] sm:text-[11px]' : 'text-[10px]'
                       }`}>
                         {dowNames[d.dow]}
                       </span>
@@ -599,6 +657,24 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       const checkoutRes = occupancyMap.checkouts[cabinCode]?.[d.iso];
 
                       const borderCell = isDarkMode ? 'border-[#242A33]' : 'border-[#E2E8F0]';
+
+                      // SUPERPOSICIÓN: dos o más reservas activas la misma noche en la misma cabaña
+                      const enConflicto = occupancyMap.dobles[cabinCode]?.[d.iso];
+                      if (enConflicto && enConflicto.length > 1 && !esSinAsignar(cabinCode)) {
+                        return (
+                          <td key={d.iso} className={`p-0.5 border-b border-r ${borderCell} ${cellHeight} align-middle`}>
+                            <button
+                              type="button"
+                              onClick={() => onSelectReserva(enConflicto[0])}
+                              title={`Superposición: ${enConflicto.map(r => `${r.huesped} (${r.plataforma})`).join(' / ')}`}
+                              aria-label={`Superposición de ${enConflicto.length} reservas`}
+                              className={`${barHeight} w-full rounded-md text-white text-[11px] font-black flex items-center justify-center bg-[repeating-linear-gradient(45deg,#dc2626,#dc2626_6px,#991b1b_6px,#991b1b_12px)] ring-2 ring-red-500`}
+                            >
+                              ⚠ {enConflicto.length}
+                            </button>
+                          </td>
+                        );
+                      }
                       const dayBg = d.isToday 
                         ? isDarkMode ? 'bg-[#1E293B]/40' : 'bg-blue-50'
                         : d.isWeekend 
@@ -683,7 +759,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                     : (volAssignedName ? `Desocupada (Pendiente limpieza 🔴 - Asignada a ${volAssignedName})` : 'Desocupada (Pendiente limpieza 🔴)')
                                 }`}
                               >
-                                <span className="text-[8px] sm:text-[9px] font-black truncate text-right leading-none max-w-full px-0.5" title={checkoutRes.huesped}>
+                                <span className="text-[10px] sm:text-[11px] font-black truncate text-right leading-none max-w-full px-0.5" title={checkoutRes.huesped}>
                                   {isIcalOut && (!checkoutRes.huesped || checkoutRes.huesped.includes('Bloqueado') || checkoutRes.huesped.includes('Not available')) 
                                     ? 'OUT' 
                                     : `${guestOut.replace(/^🔒\s*/, '')} ${isCheckoutClean ? '✓' : '🔴'}`}
@@ -707,7 +783,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                 style={{ backgroundColor: bgIn }}
                                 title={`Check-in / Ocupada: ${res.huesped}`}
                               >
-                                <span className="text-[8px] sm:text-[9px] font-black truncate text-left leading-none max-w-full px-0.5" title={res.huesped}>
+                                <span className="text-[10px] sm:text-[11px] font-black truncate text-left leading-none max-w-full px-0.5" title={res.huesped}>
                                   {isIcalIn && (!res.huesped || res.huesped.includes('Bloqueado') || res.huesped.includes('Not available')) 
                                     ? 'IN' 
                                     : guestIn.replace(/^🔒\s*/, '')}
@@ -953,7 +1029,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                           ? isDarkMode ? 'bg-[#1C2622] border-emerald-500/50 text-emerald-300' : 'bg-emerald-100 border-emerald-400 text-emerald-900'
                           : isDarkMode ? 'bg-[#1A1F26] border-[#2D3540]' : 'bg-[#FAF5EE] border-[#E2E8F0]'
                       }`}
-                      onClick={() => onSelectVolunteerSlot && onSelectVolunteerSlot(volId, today.toISOString().split('T')[0])}
+                      onClick={() => onSelectVolunteerSlot && onSelectVolunteerSlot(volId, hoyIso())}
                     >
                       <div className="flex items-center justify-center sm:justify-start gap-1 sm:gap-1.5 min-w-0">
                         <span className="text-xs shrink-0">
@@ -1066,7 +1142,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
           });
           const liqTotal = em.reduce((s, r) => s + calcFinancials(r).liq, 0);
           const nochesTotal = em.reduce((s, r) => s + calcFinancials(r).n, 0);
-          const todayIso = today.toISOString().split('T')[0];
+          const todayIso = hoyIso();
           const ocupadasHoy = reservas.filter(
             r => r.estado !== 'Cancelada' && r.estado !== 'Non show' && r.checkin <= todayIso && r.checkout > todayIso
           ).length;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CABANAS, DN, DC, CABANAS_POR_TIPO, TIPOS, formatMoney } from '../services/cabinConfig';
-import { Reserva } from '../types';
+import { fetchOcupadas } from '../services/api';
+import { hoyIso, sumarDias } from '../services/fechas';
 import { 
   Calendar, 
   Users, 
@@ -23,19 +24,14 @@ import {
   Phone
 } from 'lucide-react';
 
+// Página pública: NO recibe reservas. Solo consulta qué cabañas están ocupadas (sin nombres ni precios).
 interface LandingPageViewProps {
-  reservas: Reserva[];
   onBackToAdmin: () => void;
-  onNewReservaCreated?: (reserva: Reserva) => void;
 }
 
-export const LandingPageView: React.FC<LandingPageViewProps> = ({
-  reservas,
-  onBackToAdmin,
-  onNewReservaCreated,
-}) => {
-  const [searchCheckin, setSearchCheckin] = useState<string>('2026-10-10');
-  const [searchCheckout, setSearchCheckout] = useState<string>('2026-10-12');
+export const LandingPageView: React.FC<LandingPageViewProps> = ({ onBackToAdmin }) => {
+  const [searchCheckin, setSearchCheckin] = useState<string>(() => sumarDias(hoyIso(), 1));
+  const [searchCheckout, setSearchCheckout] = useState<string>(() => sumarDias(hoyIso(), 3));
   const [searchPax, setSearchPax] = useState<number>(2);
   const [searchResult, setSearchResult] = useState<string | null>(null);
 
@@ -51,22 +47,26 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   ]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
 
-  const handleSearchAvailability = () => {
-    if (!searchCheckin || !searchCheckout) return;
-
-    // Verificar cabañas ocupadas
-    const ocupadas = new Set<string>();
-    for (const r of reservas) {
-      if (r.estado === 'Cancelada' || r.estado === 'Non show' || !r.checkin || !r.checkout) continue;
-      const seCruzan = !(r.checkout <= searchCheckin || r.checkin >= searchCheckout);
-      if (seCruzan && r.depto) ocupadas.add(r.depto);
+  const handleSearchAvailability = async () => {
+    if (!searchCheckin || !searchCheckout || searchCheckout <= searchCheckin) {
+      setSearchResult('Elegí una fecha de salida posterior a la de llegada.');
+      return;
     }
-
-    const libres = CABANAS.filter(c => !ocupadas.has(c));
-    if (libres.length === 0) {
-      setSearchResult('No tenemos cabañas disponibles para esas fechas exactas. ¡Probá con otras fechas o consultale a Xenia alternativas!');
-    } else {
-      setSearchResult(`¡Tenemos ${libres.length} cabañas disponibles para esas fechas! Podés reservar directamente abajo o charlar con Xenia para que te la reserve.`);
+    try {
+      const ocupadas = await fetchOcupadas(searchCheckin, searchCheckout);
+      // Las reservas "sin asignar" (SA_tipo) ocupan un lugar de ese tipo de cabaña
+      const libres = (Object.keys(CABANAS_POR_TIPO) as Array<keyof typeof CABANAS_POR_TIPO>).reduce((total, tipo) => {
+        const cabanas = CABANAS_POR_TIPO[tipo];
+        const ocupadasTipo = cabanas.filter(c => ocupadas.includes(c)).length + ocupadas.filter(o => o === `SA_${tipo}`).length;
+        return total + Math.max(0, cabanas.length - ocupadasTipo);
+      }, 0);
+      if (libres === 0) {
+        setSearchResult('No tenemos cabañas disponibles para esas fechas exactas. ¡Probá con otras fechas o consultale a Xenia alternativas!');
+      } else {
+        setSearchResult(`¡Tenemos ${libres} ${libres === 1 ? 'cabaña disponible' : 'cabañas disponibles'} para esas fechas! Escribinos por WhatsApp o charlá con Xenia para reservar.`);
+      }
+    } catch (_) {
+      setSearchResult('No pudimos consultar la disponibilidad ahora. Escribinos por WhatsApp.');
     }
   };
 
@@ -98,9 +98,6 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         const data = await res.json();
         const toolName = data.toolExecutions?.[0]?.name;
 
-        if (data.reservaCreada && onNewReservaCreated) {
-          onNewReservaCreated(data.reservaCreada);
-        }
 
         setChatMessages(prev => [
           ...prev,

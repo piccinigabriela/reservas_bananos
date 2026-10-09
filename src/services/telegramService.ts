@@ -1,5 +1,6 @@
 import { Reserva } from '../types';
 import { DN, calcFinancials, formatMoney, formatDateEs } from './cabinConfig';
+import { cfg, guardarCfg } from './settings';
 
 export interface TelegramConfig {
   botToken: string;
@@ -9,36 +10,22 @@ export interface TelegramConfig {
   notificarCheckouts: boolean;
 }
 
-const STORAGE_KEY = 'bn_telegram_cfg';
-
+// Antes había un token de bot escrito en el código (quedaba público). Ahora la configuración
+// vive en la base, en una clave privada que solo puede leer el propietario.
 const DEFAULT_CONFIG: TelegramConfig = {
-  botToken: '8602214307:AAHzYbMANIRjzbufYN09X__L_3VY9VnBRX8',
-  chatId: '7019482925',
-  enabled: true,
+  botToken: '',
+  chatId: '',
+  enabled: false,
   notificarCheckins: true,
   notificarCheckouts: true,
 };
 
 export function getTelegramConfig(): TelegramConfig {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...DEFAULT_CONFIG,
-        ...parsed,
-        botToken: parsed.botToken || DEFAULT_CONFIG.botToken,
-        chatId: parsed.chatId || DEFAULT_CONFIG.chatId,
-      };
-    }
-  } catch (_) {}
-  return DEFAULT_CONFIG;
+  return { ...DEFAULT_CONFIG, ...cfg<Partial<TelegramConfig>>('privado_telegram', {}) };
 }
 
-export function saveTelegramConfig(cfg: TelegramConfig): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
-  } catch (_) {}
+export async function saveTelegramConfig(c: TelegramConfig): Promise<void> {
+  await guardarCfg('privado_telegram', c);
 }
 
 export async function sendTelegramMessage(token: string, chatId: string, text: string): Promise<{ success: boolean; error?: string }> {

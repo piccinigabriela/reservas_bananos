@@ -12,6 +12,8 @@ import {
   CabinStatusInfo,
   CalendarColorMode
 } from '../types';
+import { cfg, guardarCfg } from './settings';
+import { hoyIso } from './fechas';
 
 export const CABANAS: CabinCode[] = ['C2', 'C3', 'C5', 'C6', 'C7', 'C8', 'C9'];
 
@@ -91,31 +93,15 @@ export function getInitialCabinCleaningStatuses(): Record<CabinCode, CabinStatus
   };
 }
 
-export function getCabinCleaningStatuses(): Record<CabinCode, CabinStatusInfo> {
-  try {
-    const saved = localStorage.getItem('bn_cabin_cleaning_statuses');
-    if (saved) {
-      return { ...getInitialCabinCleaningStatuses(), ...JSON.parse(saved) };
-    }
-  } catch (_) {}
-  return getInitialCabinCleaningStatuses();
-}
-
-export function saveCabinCleaningStatuses(statuses: Record<CabinCode, CabinStatusInfo>): void {
-  try {
-    localStorage.setItem('bn_cabin_cleaning_statuses', JSON.stringify(statuses));
-  } catch (_) {}
-}
-
 /**
  * Calcula el estado efectivo de limpieza y ocupación de cada cabaña para el día actual
  * sincronizando automáticamente los check-outs del día, estadías activas y tareas de limpieza realizadas.
  */
 export function getEffectiveCabinStatuses(
-  manualStatuses: Record<CabinCode, CabinStatusInfo>,
+  manualStatuses: Partial<Record<CabinCode, CabinStatusInfo>>,
   reservas: Reserva[],
   volunteerTasks: VolunteerTask[] = [],
-  todayIso: string = new Date().toISOString().split('T')[0]
+  todayIso: string = hoyIso()
 ): Record<CabinCode, CabinStatusInfo> {
   const result: Record<CabinCode, CabinStatusInfo> = { ...getInitialCabinCleaningStatuses(), ...manualStatuses };
 
@@ -163,24 +149,6 @@ export function getEffectiveCabinStatuses(
   });
 
   return result;
-}
-
-export function updateCabinCleaningStatus(
-  depto: CabinCode, 
-  status: CabinCleaningStatus, 
-  updatedBy?: string, 
-  notas?: string
-): Record<CabinCode, CabinStatusInfo> {
-  const current = getCabinCleaningStatuses();
-  current[depto] = {
-    depto,
-    status,
-    updatedAt: new Date().toISOString(),
-    updatedBy: updatedBy || 'Usuario',
-    notas: notas || current[depto]?.notas,
-  };
-  saveCabinCleaningStatuses(current);
-  return current;
 }
 
 export const DEFAULT_VOLUNTEER_NAMES: Record<VolunteerId, string> = {
@@ -273,33 +241,12 @@ export const VOLUNTEER_TASK_META: Record<VolunteerTaskType, {
 };
 
 export function getVolunteerNames(): Record<VolunteerId, string> {
-  try {
-    const saved = localStorage.getItem('bn_vol_names');
-    if (saved) return { ...DEFAULT_VOLUNTEER_NAMES, ...JSON.parse(saved) };
-  } catch (_) {}
-  return { ...DEFAULT_VOLUNTEER_NAMES };
+  return { ...DEFAULT_VOLUNTEER_NAMES, ...cfg<Partial<Record<VolunteerId, string>>>('voluntarios', {}) };
 }
 
-export function saveVolunteerNames(names: Record<VolunteerId, string>): void {
-  try {
-    localStorage.setItem('bn_vol_names', JSON.stringify(names));
-  } catch (_) {}
+export async function saveVolunteerNames(names: Record<VolunteerId, string>): Promise<void> {
+  await guardarCfg('voluntarios', names);
 }
-
-export function getVolunteerTasks(): VolunteerTask[] {
-  try {
-    const saved = localStorage.getItem('bn_vol_tasks');
-    if (saved) return JSON.parse(saved);
-  } catch (_) {}
-  return [];
-}
-
-export function saveVolunteerTasks(tasks: VolunteerTask[]): void {
-  try {
-    localStorage.setItem('bn_vol_tasks', JSON.stringify(tasks));
-  } catch (_) {}
-}
-
 
 export const DC: Record<CabinCode, string> = {
   C2: '#3d7a25', // Verde bosque
@@ -378,34 +325,6 @@ export const PLATAFORMA_COLORES: Record<string, string> = {
   Otro: '#4b5563',
 };
 
-export const MASTER_SECRET_PIN = '1535';
-
-export const DEFAULT_PINS: Record<string, string> = {
-  admin: '1982',
-  recepcion: '0000',
-  vol: '0000',
-  vol1: '1111',
-  vol2: '2222',
-};
-
-export function isMasterSecretPin(pin: string): boolean {
-  return pin === '1535' || pin === '1982' || pin === '2026' || pin === '1234';
-}
-
-export function getAppPins(): Record<string, string> {
-  try {
-    const saved = localStorage.getItem('bn_p');
-    if (saved) return { ...DEFAULT_PINS, ...JSON.parse(saved) };
-  } catch (_) {}
-  return { ...DEFAULT_PINS };
-}
-
-export function saveAppPins(pins: Record<string, string>): void {
-  try {
-    localStorage.setItem('bn_p', JSON.stringify(pins));
-  } catch (_) {}
-}
-
 export const USER_META: Record<string, { name: string; role: string }> = {
   admin: { name: 'Propietario', role: 'Modo Completo' },
   recepcion: { name: 'Recepción', role: 'Día a Día (Solo Calendario)' },
@@ -413,17 +332,6 @@ export const USER_META: Record<string, { name: string; role: string }> = {
   vol1: { name: 'Voluntario 1', role: 'Mi Agenda Worldpackers' },
   vol2: { name: 'Voluntario 2', role: 'Mi Agenda Worldpackers' },
 };
-
-// Supabase config
-export const SB_URL = 'https://vnfgitgadadjjjciftsa.supabase.co';
-export const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuZmdpdGdhZGFkampqY2lmdHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NjI5MzgsImV4cCI6MjA5NTMzODkzOH0.g018Do3-8UvyWATZg-EesrXH8T5L65YXomK1mjsSnHQ';
-export const SB_HDR = {
-  'Content-Type': 'application/json',
-  apikey: SB_KEY,
-  Authorization: 'Bearer ' + SB_KEY,
-};
-export const SB_TABLE = 'reservas_bananos';
-export const SB_TABLE_G = 'gastos_bananos';
 
 export const esSinAsignar = (dep: string) => typeof dep === 'string' && dep.startsWith('SA_');
 export const tipoDeSinAsignar = (dep: string): CabinType => dep.replace('SA_', '') as CabinType;
@@ -437,35 +345,20 @@ export const nightsCount = (ci: string, co: string): number => {
 };
 
 export function getComisionesCfg(): { airbnb: number; booking: number } {
-  try {
-    const saved = localStorage.getItem('bn_com');
-    if (saved) return JSON.parse(saved);
-  } catch (_) {}
-  return { airbnb: 15, booking: 15 };
+  return { airbnb: 15, booking: 15, ...cfg<Partial<{ airbnb: number; booking: number }>>('comisiones', {}) };
 }
 
 export function getMonedaPlatCfg(): Record<string, string> {
-  try {
-    const saved = localStorage.getItem('bn_moneda_plat');
-    if (saved) return JSON.parse(saved);
-  } catch (_) {}
-  return { Airbnb: 'USD', Booking: 'ARS', Directo: 'ARS' };
+  return { Airbnb: 'USD', Booking: 'ARS', Directo: 'ARS', ...cfg<Record<string, string>>('moneda_plataforma', {}) };
 }
 
 export function getTipoCambioVal(): number {
-  try {
-    const saved = localStorage.getItem('bn_tc');
-    if (saved) return parseFloat(saved) || 1550;
-  } catch (_) {}
-  return 1550;
+  const v = Number(cfg<number | string>('tipo_cambio', 1550));
+  return v > 0 ? v : 1550;
 }
 
 export function getFechaCorteCfg(): string {
-  try {
-    const saved = localStorage.getItem('bn_fecha_corte');
-    if (saved) return saved.trim();
-  } catch (_) {}
-  return '2026-09-01'; // Por defecto 1 de septiembre de 2026
+  return String(cfg<string>('fecha_corte', '2026-09-01') ?? '').trim();
 }
 
 export function aARS(monto: number, plat: string, moneda?: string): number {
@@ -501,7 +394,7 @@ export function formatDateExtended(isoDate: string): string {
 export function getTemporada(fecha: string): 'Alta' | 'Baja' {
   if (!fecha) return 'Baja';
   try {
-    const ranges: TemporadaRango[] = JSON.parse(localStorage.getItem('bn_temp') || '[]');
+    const ranges: TemporadaRango[] = cfg<TemporadaRango[]>('temporadas', []);
     const [y, m, d] = fecha.split('-').map(Number);
     const mes = m - 1;
     for (const r of ranges) {
