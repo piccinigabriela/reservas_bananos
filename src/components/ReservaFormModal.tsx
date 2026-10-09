@@ -15,11 +15,12 @@ import {
   getComisionesCfg
 } from '../services/cabinConfig';
 import { X, Calendar, DollarSign, User, AlertTriangle } from 'lucide-react';
+import { esBloqueo, estaActiva, nombreClave, seSuperponen } from '../services/reservaUtils';
 
 interface ReservaFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (reservaData: Partial<Reserva>) => void;
+  onSave: (reservaData: Partial<Reserva>, opciones?: { reemplazarBloqueos?: string[] }) => void | Promise<void>;
   initialData?: Reserva | null;
   existingReservas: Reserva[];
   isDyslexiaMode: boolean;
@@ -63,6 +64,9 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
   const [late, setLate] = useState<boolean>(initialData?.late || false);
 
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [reemplazarBloqueo, setReemplazarBloqueo] = useState<boolean>(false);
+  const [avisoDuplicado, setAvisoDuplicado] = useState<string>('');
+  const [guardando, setGuardando] = useState<boolean>(false);
 
   const noches = nightsCount(checkin, checkout);
 
@@ -98,6 +102,9 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       setEarly(initialData?.early || false);
       setLate(initialData?.late || false);
       setErrorMessage('');
+      setReemplazarBloqueo(false);
+      setAvisoDuplicado('');
+      setGuardando(false);
     }
   }, [isOpen, initialData]);
 
@@ -125,6 +132,14 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Bloqueos automáticos (Airbnb/Booking/Google) que se pisan con esta reserva
+  const bloqueosSuperpuestos =
+    checkin && checkout && !esSinAsignar(depto)
+      ? existingReservas.filter(
+          r => r.id !== initialData?.id && r.depto === depto && esBloqueo(r) && estaActiva(r) && seSuperponen(r, { checkin, checkout })
+        )
+      : [];
+
   // Resumen financiero en tiempo real
   const fin = calcFinancials({
     checkin,
@@ -140,6 +155,7 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (guardando) return;
     setErrorMessage('');
 
     if (!depto || !huesped.trim() || !checkin || !checkout) {
@@ -192,23 +208,52 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
           !(checkout <= r.checkin || checkin >= r.checkout)
       );
 
-      if (conflict && !(checkin === conflict.checkout || checkout === conflict.checkin)) {
+      if (conflict) {
         setErrorMessage(`Hay superposición de fechas con la reserva de ${conflict.huesped} en ${DN[depto]}.`);
+        return;
+      }
+
+      // Antes los bloqueos de Airbnb/Booking se borraban sin avisar: podía terminar en doble reserva real.
+      if (bloqueosSuperpuestos.length > 0 && !reemplazarBloqueo) {
+        const b = bloqueosSuperpuestos[0];
+        setErrorMessage(
+          `${DN[depto]} figura bloqueada por ${b.plataforma} del ${b.checkin} al ${b.checkout} (${b.huesped}). ` +
+            'Si es la MISMA reserva, marcá "Es la misma reserva" abajo. Si es otra, elegí otra cabaña.'
+        );
         return;
       }
     }
 
-    // Convertir ID de iCal a ID permanente para que nunca más sea reemplazado por la sincronización
-    let targetId = initialData?.id;
-    if (!targetId || targetId.startsWith('ical-')) {
-      targetId = 'res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+    // Aviso (no bloquea): el mismo huésped ya figura en OTRA cabaña con fechas que se cruzan
+    const clave = nombreClave(huesped);
+    const mismoHuesped = existingReservas.find(
+      r =>
+        r.id !== initialData?.id &&
+        r.depto !== depto &&
+        estaActiva(r) &&
+        clave &&
+        nombreClave(r.huesped) === clave &&
+        seSuperponen(r, { checkin, checkout })
+    );
+    if (mismoHuesped && avisoDuplicado !== mismoHuesped.id) {
+      setAvisoDuplicado(mismoHuesped.id);
+      setErrorMessage(
+        `Ojo: "${mismoHuesped.huesped}" ya figura en ${DN[mismoHuesped.depto] || mismoHuesped.depto} del ${mismoHuesped.checkin} al ${mismoHuesped.checkout}. ` +
+          'Si es un duplicado, cancelá y editá esa. Si son dos reservas distintas, tocá Guardar de nuevo.'
+      );
+      return;
     }
+
+    // El id se conserva siempre (también al convertir un bloqueo iCal): así la sincronización
+    // reconoce la fila y no vuelve a crear el bloqueo.
+    const targetId = initialData?.id || 'res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
 
     const finalComision = comision !== '' && !isNaN(Number(comision)) 
       ? Number(comision) 
       : (plataforma === 'Airbnb' || plataforma === 'Booking' ? 15 : 0);
 
-    onSave({
+    setGuardando(true);
+    const resultado = onSave({
       id: targetId,
       depto,
       huesped: huesped.trim(),
@@ -230,13 +275,16 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
       early,
       late,
       creado: initialData?.creado || new Date().toISOString(),
-    });
+      icalRef: initialData?.icalRef,
+      origen: initialData?.origen,
+    }, { reemplazarBloqueos: reemplazarBloqueo ? bloqueosSuperpuestos.map(b => b.id) : [] });
+    Promise.resolve(resultado).finally(() => setGuardando(false));
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-xl my-auto max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#FCF8F2] border-2 border-[#DBCAB5] rounded-2xl w-full max-w-xl my-auto max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         {/* Encabezado fijo superior */}
@@ -337,6 +385,20 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
                 </label>
               </div>
             </div>
+
+            {bloqueosSuperpuestos.length > 0 && (
+              <label className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reemplazarBloqueo}
+                  onChange={e => setReemplazarBloqueo(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 accent-[#D2502A]"
+                />
+                <span>
+                  <strong>Es la misma reserva</strong> que el bloqueo de {bloqueosSuperpuestos.map(b => b.plataforma).join(', ')} ({bloqueosSuperpuestos[0].checkin} → {bloqueosSuperpuestos[0].checkout}). Reemplazar el bloqueo por esta reserva.
+                </span>
+              </label>
+            )}
 
             {checkin && checkout && noches > 0 && (
               <div className="bg-[#FAF4EB] py-1.5 px-3 rounded-lg text-xs font-bold text-[#8C5823] flex items-center justify-between">
@@ -747,9 +809,10 @@ export const ReservaFormModal: React.FC<ReservaFormModalProps> = ({
 
             <button
               type="submit"
-              className="flex-2 py-2.5 sm:py-3 px-4 sm:px-6 bg-[#D2502A] hover:bg-[#E55B33] text-white font-bold text-xs sm:text-base rounded-xl transition shadow-md text-center transform active:scale-95"
+              disabled={guardando}
+              className="flex-2 py-2.5 sm:py-3 px-4 sm:px-6 bg-[#D2502A] hover:bg-[#E55B33] disabled:opacity-60 text-white font-bold text-xs sm:text-base rounded-xl transition shadow-md text-center transform active:scale-95"
             >
-              Guardar Reserva ✓
+              {guardando ? 'Guardando…' : 'Guardar Reserva ✓'}
             </button>
           </div>
         </form>

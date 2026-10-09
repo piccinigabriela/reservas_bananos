@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { CABANAS, DN, DC, DEFAULT_PINS, getAppPins, saveAppPins, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal, getFechaCorteCfg, getVolunteerNames, saveVolunteerNames } from '../../services/cabinConfig';
+import { CABANAS, DN, DC, getComisionesCfg, getMonedaPlatCfg, getTipoCambioVal, getFechaCorteCfg, getVolunteerNames } from '../../services/cabinConfig';
 import { Reserva, VolunteerId } from '../../types';
 import { downloadIcsFile } from '../../services/icalExport';
-import { DEFAULT_GCAL_FEED_URL } from '../../services/api';
+import { cfg, guardarCfg } from '../../services/settings';
+import { supabase } from '../../services/supabase';
 import { Settings, Key, Phone, DollarSign, Calendar, Database, RefreshCw, Save, Download, Copy, Check, ExternalLink, Trash2, AlertTriangle, Clock, Users, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface ConfigViewProps {
@@ -11,7 +12,8 @@ interface ConfigViewProps {
   isSyncing: boolean;
   onDownloadBackup: () => void;
   onRestoreBackup: (file: File) => void;
-  onClearAllReservas?: () => void;
+  onConfigGuardada?: () => void;
+  onError?: (e: unknown) => void;
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
@@ -20,24 +22,16 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   isSyncing,
   onDownloadBackup,
   onRestoreBackup,
-  onClearAllReservas,
+  onConfigGuardada,
+  onError,
 }) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   
-  // PINs
-  const [pins, setPins] = useState<Record<string, string>>(() => getAppPins());
-
   // Voluntarios Worldpackers
   const [volNames, setVolNames] = useState<Record<VolunteerId, string>>(() => getVolunteerNames());
 
   // WhatsApp
-  const [waAdmin, setWaAdmin] = useState(() => {
-    try {
-      const saved = localStorage.getItem('bn_wa');
-      if (saved) return JSON.parse(saved).admin || '';
-    } catch (_) {}
-    return '';
-  });
+  const [waAdmin, setWaAdmin] = useState<string>(() => cfg<{ admin?: string }>('whatsapp_admin', {}).admin || '');
 
   // Comisiones
   const [comAirbnb, setComAirbnb] = useState<number>(() => getComisionesCfg().airbnb);
@@ -49,42 +43,30 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [fechaCorte, setFechaCorte] = useState<string>(() => getFechaCorteCfg());
 
   // iCal URLs
-  const [icalUrls, setIcalUrls] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('bn_ical');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (!parsed.gc_general) parsed.gc_general = DEFAULT_GCAL_FEED_URL;
-        return parsed;
-      }
-    } catch (_) {}
-    return { gc_general: DEFAULT_GCAL_FEED_URL };
-  });
+  const [icalUrls, setIcalUrls] = useState<Record<string, string>>(() => ({ ...cfg<Record<string, string>>('ical_urls', {}) }));
 
   const [savedStatus, setSavedStatus] = useState<string>('');
+  const [guardando, setGuardando] = useState(false);
 
-  const handleSaveAll = () => {
-    // Validar PINs
-    const requiredKeys = ['admin', 'recepcion', 'vol1', 'vol2'] as const;
-    for (const k of requiredKeys) {
-      const val = pins[k] || '';
-      if (val && !/^\d{4}$/.test(val)) {
-        alert(`El PIN de ${k} debe tener exactamente 4 dígitos numéricos.`);
-        return;
-      }
+  // Se guarda en la base: lo ven todos los dispositivos (antes quedaba solo en este navegador)
+  const handleSaveAll = async () => {
+    setGuardando(true);
+    try {
+      await guardarCfg('whatsapp_admin', { admin: waAdmin.trim() });
+      await guardarCfg('comisiones', { airbnb: comAirbnb, booking: comBooking });
+      await guardarCfg('moneda_plataforma', monedas);
+      await guardarCfg('tipo_cambio', tipoCambio);
+      await guardarCfg('fecha_corte', fechaCorte.trim());
+      await guardarCfg('ical_urls', icalUrls);
+      await guardarCfg('voluntarios', volNames);
+      setSavedStatus('Configuración guardada para todos los dispositivos ✓');
+      setTimeout(() => setSavedStatus(''), 3500);
+      onConfigGuardada?.();
+    } catch (e) {
+      onError?.(e);
+    } finally {
+      setGuardando(false);
     }
-
-    saveAppPins(pins);
-    localStorage.setItem('bn_wa', JSON.stringify({ admin: waAdmin.trim() }));
-    localStorage.setItem('bn_com', JSON.stringify({ airbnb: comAirbnb, booking: comBooking }));
-    localStorage.setItem('bn_moneda_plat', JSON.stringify(monedas));
-    localStorage.setItem('bn_tc', String(tipoCambio));
-    localStorage.setItem('bn_fecha_corte', fechaCorte.trim());
-    localStorage.setItem('bn_ical', JSON.stringify(icalUrls));
-    saveVolunteerNames(volNames);
-
-    setSavedStatus('¡Configuración de voluntarios, PINs y parámetros guardada con éxito! ✓');
-    setTimeout(() => setSavedStatus(''), 3500);
   };
 
   const handleIcalChange = (key: string, val: string) => {
@@ -100,16 +82,17 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <span>Ajustes del Sistema</span>
           </h2>
           <p className="text-xs text-[#7A6752] mt-0.5">
-            Configuración de PINs de 4 dígitos, nombres de voluntarios Worldpackers, sincronizaciones iCal y respaldos.
+            Nombres de voluntarios, comisiones, calendarios iCal y respaldos. Se guarda para todos los dispositivos.
           </p>
         </div>
 
         <button
           onClick={handleSaveAll}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#D2502A] hover:bg-[#E55B33] text-white font-bold text-sm rounded-xl transition shadow-md cursor-pointer"
+          disabled={guardando}
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#D2502A] hover:bg-[#E55B33] disabled:opacity-60 text-white font-bold text-sm rounded-xl transition shadow-md cursor-pointer"
         >
           <Save className="w-4 h-4" />
-          <span>Guardar Cambios</span>
+          <span>{guardando ? 'Guardando…' : 'Guardar Cambios'}</span>
         </button>
       </div>
 
@@ -125,10 +108,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <div>
             <h3 className="text-base font-bold text-[#2A2118] flex items-center gap-2">
               <Users className="w-5 h-5 text-emerald-600" />
-              <span>Voluntarios Worldpackers (Nombres y PINs de Acceso)</span>
+              <span>Voluntarios Worldpackers</span>
             </h3>
             <p className="text-xs text-[#7A6752] mt-1 leading-relaxed">
-              Cada voluntario ingresa a su propio calendario en su celular escribiendo su <strong>PIN de 4 dígitos</strong> (por ejemplo: los últimos 4 números de su celular).
+              Cada voluntario entra desde su celular eligiendo su perfil y escribiendo su <strong>PIN de 6 dígitos</strong>.
             </p>
           </div>
           <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-full whitespace-nowrap">
@@ -140,7 +123,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-start gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
           <span>
-            <strong>¿Cómo funciona cuando llega un nuevo voluntario?</strong> Simplemente cambiás su nombre acá (ej: <em>"Lucas"</em>) y ponés un PIN de 4 dígitos (ej: <em>"9456"</em>). Cuando el voluntario abra la página en su teléfono y elija su usuario, ingresará ese PIN y verá exclusivamente sus tareas de parque, limpieza y días libres.
+            <strong>Cuando llega un voluntario nuevo:</strong> cambiá su nombre acá y cambiale el PIN en "Usuarios y acceso" (así el voluntario anterior deja de tener acceso).
           </span>
         </div>
 
@@ -170,27 +153,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               />
             </div>
 
-            <div>
-              <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">
-                PIN de Acceso (4 dígitos):
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={pins.vol1 || ''}
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setPins(p => ({ ...p, vol1: val }));
-                  }}
-                  placeholder="1111"
-                  className="bg-white border-2 border-[#D4C3AE] focus:border-emerald-600 rounded-lg px-3 py-1.5 text-center font-bold text-base text-[#2A2118] w-28 tracking-widest outline-none font-mono"
-                />
-                <span className="text-[11px] text-[#7A6752]">
-                  (ej: últimos 4 de su cel)
-                </span>
-              </div>
-            </div>
           </div>
 
           {/* Tarjeta Voluntario 2 */}
@@ -218,76 +180,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               />
             </div>
 
-            <div>
-              <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">
-                PIN de Acceso (4 dígitos):
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={pins.vol2 || ''}
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setPins(p => ({ ...p, vol2: val }));
-                  }}
-                  placeholder="2222"
-                  className="bg-white border-2 border-[#D4C3AE] focus:border-emerald-600 rounded-lg px-3 py-1.5 text-center font-bold text-base text-[#2A2118] w-28 tracking-widest outline-none font-mono"
-                />
-                <span className="text-[11px] text-[#7A6752]">
-                  (ej: últimos 4 de su cel)
-                </span>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* PINs de Acceso General y Propietario */}
-      <div className="bg-white border border-[#E5D7C5] rounded-xl p-5 shadow-xs space-y-4">
-        <h3 className="text-sm font-bold text-[#2A2118] flex items-center gap-2">
-          <Key className="w-4 h-4 text-[#D2502A]" />
-          <span>PINs de Propietario y Recepción (4 dígitos)</span>
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
-            <div>
-              <span className="font-bold text-xs text-[#2A2118] block">👑 Propietario / Admin</span>
-              <span className="text-[11px] text-[#7A6752] block">Acceso general a finanzas, balances y configuración</span>
-            </div>
-            <input
-              type="text"
-              maxLength={4}
-              value={pins.admin || ''}
-              onChange={e => {
-                const val = e.target.value.replace(/\D/g, '');
-                setPins(p => ({ ...p, admin: val }));
-              }}
-              placeholder="1234"
-              className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
-            />
-          </div>
-
-          <div className="bg-[#FAF4EB] p-3.5 rounded-xl border border-[#EFE2D2] space-y-2">
-            <div>
-              <span className="font-bold text-xs text-[#2A2118] block">🌿 Día a Día / Recepción</span>
-              <span className="text-[11px] text-[#7A6752] block">Calendario diario de cabañas y recambios</span>
-            </div>
-            <input
-              type="text"
-              maxLength={4}
-              value={pins.recepcion || pins.vol || ''}
-              onChange={e => {
-                const val = e.target.value.replace(/\D/g, '');
-                setPins(p => ({ ...p, recepcion: val, vol: val }));
-              }}
-              placeholder="0000"
-              className="bg-white border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-bold text-base w-28 tracking-widest font-mono outline-none"
-            />
-          </div>
-        </div>
-      </div>
+      {/* Usuarios y acceso */}
+      <UsuariosYAcceso volNames={volNames} />
 
       {/* WhatsApp de Avisos */}
       <div className="bg-white border border-[#E5D7C5] rounded-xl p-5 shadow-xs space-y-3">
@@ -457,7 +355,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             </span>
           </div>
           <p className="text-[11px] text-blue-800 leading-relaxed">
-            Si tenés un calendario único en Google donde anotas todas las reservas del complejo, pegá su dirección secreta iCal acá:
+            Si tenés un calendario único en Google donde anotás las reservas, pegá su dirección secreta iCal acá. Para que cada evento caiga en su cabaña, el título tiene que empezar con la cabaña (ej: "C5 María x2"); si no, la sincronización lo avisa y no lo carga.
           </p>
           <input
             type="url"
@@ -498,8 +396,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const baseUrl = window.location.origin;
-                        const url = `${baseUrl}/api/ical/${code}.ics`;
+                        // La app está en GitHub Pages: el calendario de salida lo sirve el worker de Cloudflare
+                        const url = `https://bananos-ical.huuventa.workers.dev/${code}.ics`;
                         navigator.clipboard.writeText(url);
                         setCopiedCode(code);
                         setTimeout(() => setCopiedCode(null), 2500);
@@ -601,7 +499,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <span>Copia de Respaldo Local (Backup)</span>
         </h3>
         <p className="text-xs text-[#7A6752]">
-          Tus datos se sincronizan automáticamente en Supabase. Si deseás tener una copia descargada en tu dispositivo, podés bajarla aquí o restaurarla.
+          Tus datos viven en Supabase. Podés bajar una copia cuando quieras. Restaurar solo AGREGA reservas que falten: nunca pisa ni borra las actuales.
         </p>
 
         <div className="flex items-center gap-3">
@@ -629,32 +527,137 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         </div>
       </div>
 
-      {/* Zona de Mantenimiento de Datos */}
-      <div className="bg-[#FFF5F5] border border-[#FCA5A5] rounded-xl p-5 shadow-xs space-y-3">
-        <h3 className="text-sm font-bold text-[#991B1B] flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
-          <span>Mantenimiento y Limpieza de Datos</span>
-        </h3>
-        <p className="text-xs text-[#7F1D1D] leading-relaxed">
-          Si vas a cargar un nuevo archivo CSV o .ics que ya contiene todas tus reservas anteriores y no querés que se superpongan ni dupliquen, podés vaciar todas las reservas previas.
-        </p>
+    </div>
+  );
+};
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="text-xs font-semibold text-[#991B1B]">
-            Estado actual: <strong>{reservas.length} reservas registradas</strong>
-          </div>
+/** Cambiar PIN del personal (lo valida y guarda Supabase) y la contraseña propia. */
+const UsuariosYAcceso: React.FC<{ volNames: Record<VolunteerId, string> }> = ({ volNames }) => {
+  const [perfil, setPerfil] = useState<'recepcion' | 'vol1' | 'vol2'>('recepcion');
+  const [pin, setPin] = useState('');
+  const [msgPin, setMsgPin] = useState<{ ok: boolean; t: string } | null>(null);
+  const [clave1, setClave1] = useState('');
+  const [clave2, setClave2] = useState('');
+  const [msgClave, setMsgClave] = useState<{ ok: boolean; t: string } | null>(null);
+  const [ocupado, setOcupado] = useState(false);
 
-          {onClearAllReservas && (
-            <button
-              onClick={onClearAllReservas}
-              disabled={reservas.length === 0}
-              className="px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] disabled:bg-[#FCA5A5] text-white font-bold text-xs sm:text-sm rounded-xl transition flex items-center gap-2 shadow-xs"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Vaciar todas las reservas previas</span>
-            </button>
-          )}
+  const cambiarPin = async () => {
+    setMsgPin(null);
+    if (!/^\d{6}$/.test(pin)) {
+      setMsgPin({ ok: false, t: 'El PIN tiene que tener 6 números.' });
+      return;
+    }
+    setOcupado(true);
+    const { error } = await supabase.rpc('bananos_cambiar_pin', { p_rol: perfil, p_pin: pin });
+    setOcupado(false);
+    if (error) {
+      const noExiste = /function|does not exist|not find|PGRST202/i.test(error.message);
+      setMsgPin({ ok: false, t: noExiste ? 'Esta opción todavía no está habilitada en la base (falta un paso en Supabase).' : error.message });
+    } else {
+      setMsgPin({ ok: true, t: 'PIN cambiado. Las sesiones abiertas de ese perfil se cerraron.' });
+      setPin('');
+    }
+  };
+
+  const cambiarClave = async () => {
+    setMsgClave(null);
+    if (clave1.length < 8) {
+      setMsgClave({ ok: false, t: 'Usá al menos 8 caracteres.' });
+      return;
+    }
+    if (clave1 !== clave2) {
+      setMsgClave({ ok: false, t: 'Las dos contraseñas no coinciden.' });
+      return;
+    }
+    setOcupado(true);
+    const { error } = await supabase.auth.updateUser({ password: clave1 });
+    setOcupado(false);
+    if (error) setMsgClave({ ok: false, t: error.message });
+    else {
+      setMsgClave({ ok: true, t: 'Tu contraseña se cambió ✓' });
+      setClave1('');
+      setClave2('');
+    }
+  };
+
+  const nombrePerfil = (p: 'recepcion' | 'vol1' | 'vol2') =>
+    p === 'recepcion' ? 'Recepción' : `${p === 'vol1' ? 'Voluntario 1' : 'Voluntario 2'}${volNames[p] ? ` (${volNames[p].split('(')[0].trim()})` : ''}`;
+
+  return (
+    <div className="bg-white border border-[#E5D7C5] rounded-xl p-5 shadow-xs space-y-4">
+      <h3 className="text-sm font-bold text-[#2A2118] flex items-center gap-2">
+        <Key className="w-4 h-4 text-[#D2502A]" />
+        <span>Usuarios y acceso</span>
+      </h3>
+      <p className="text-xs text-[#5A4838] leading-relaxed">
+        Recepción y voluntarios entran eligiendo su perfil y un PIN de 6 dígitos. Cuando alguien deja de trabajar, cambiale el PIN: se le cierra la sesión en su celular.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
+        <div>
+          <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">Perfil</label>
+          <select
+            value={perfil}
+            onChange={e => setPerfil(e.target.value as any)}
+            className="w-full bg-[#FAF5EE] border border-[#D4C3AE] rounded-lg px-3 py-2 text-sm font-semibold"
+          >
+            {(['recepcion', 'vol1', 'vol2'] as const).map(p => (
+              <option key={p} value={p}>{nombrePerfil(p)}</option>
+            ))}
+          </select>
         </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-[#4A3C2F] mb-1">PIN nuevo</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={pin}
+            onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+            placeholder="6 números"
+            className="w-36 bg-[#FAF5EE] border-2 border-[#D4C3AE] focus:border-[#D2502A] rounded-lg px-3 py-1.5 text-center font-mono font-bold tracking-widest outline-none"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={cambiarPin}
+          disabled={ocupado}
+          className="px-4 py-2 bg-[#2A2118] hover:bg-[#3D3023] disabled:opacity-60 text-white text-xs font-bold rounded-lg"
+        >
+          Cambiar PIN
+        </button>
+      </div>
+      {msgPin && <p className={`text-xs font-semibold ${msgPin.ok ? 'text-emerald-700' : 'text-rose-700'}`}>{msgPin.t}</p>}
+
+      <div className="pt-3 border-t border-[#EFE2D2] space-y-2">
+        <span className="block text-xs font-bold text-[#2A2118]">Mi contraseña (propietario)</span>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={clave1}
+            onChange={e => setClave1(e.target.value)}
+            placeholder="Contraseña nueva"
+            className="bg-[#FAF5EE] border border-[#D4C3AE] rounded-lg px-3 py-2 text-sm"
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={clave2}
+            onChange={e => setClave2(e.target.value)}
+            placeholder="Repetila"
+            className="bg-[#FAF5EE] border border-[#D4C3AE] rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={cambiarClave}
+            disabled={ocupado}
+            className="px-4 py-2 bg-[#2A2118] hover:bg-[#3D3023] disabled:opacity-60 text-white text-xs font-bold rounded-lg"
+          >
+            Cambiar
+          </button>
+        </div>
+        {msgClave && <p className={`text-xs font-semibold ${msgClave.ok ? 'text-emerald-700' : 'text-rose-700'}`}>{msgClave.t}</p>}
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { cfg, guardarCfg } from '../../services/settings';
+import { hoyIso, sumarDias } from '../../services/fechas';
 import { Reserva } from '../../types';
 import { 
   DN, 
@@ -47,10 +49,8 @@ interface AvisosViewProps {
 type FilterMode = 'proximas_hoy' | 'en_estadia' | '7_dias' | 'todas';
 
 export const AvisosView: React.FC<AvisosViewProps> = ({ reservas }) => {
-  const today = new Date().toISOString().split('T')[0];
-  const in7 = new Date();
-  in7.setDate(in7.getDate() + 7);
-  const in7Str = in7.toISOString().split('T')[0];
+  const today = hoyIso();
+  const in7Str = sumarDias(today, 7);
 
   // 1. Filtros y Búsqueda
   const [filterMode, setFilterMode] = useState<FilterMode>('proximas_hoy');
@@ -67,13 +67,8 @@ export const AvisosView: React.FC<AvisosViewProps> = ({ reservas }) => {
   const [isEditingMessage, setIsEditingMessage] = useState<boolean>(false);
 
   // 5. Configuración de enlaces y Wi-Fi (personalizable)
-  const [config, setConfig] = useState(() => {
-    const saved = localStorage.getItem('bn_whatsapp_config');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return DEFAULT_WHATSAPP_CONFIG;
-  });
+  // Compartida en la base (clave pública 'guia_publica': la ve también la guía del huésped)
+  const [config, setConfig] = useState(() => ({ ...DEFAULT_WHATSAPP_CONFIG, ...cfg<Record<string, any>>('guia_publica', {}) }));
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
 
   // 6. Notificaciones / Toast
@@ -87,11 +82,15 @@ export const AvisosView: React.FC<AvisosViewProps> = ({ reservas }) => {
   };
 
   // Guardar configuración personalizada de enlaces/wifi
-  const handleSaveConfig = (newCfg: typeof config) => {
-    setConfig(newCfg);
-    localStorage.setItem('bn_whatsapp_config', JSON.stringify(newCfg));
-    setShowConfigModal(false);
-    showToast('Configuración de enlaces y Wi-Fi actualizada ✓');
+  const handleSaveConfig = async (newCfg: typeof config) => {
+    try {
+      await guardarCfg('guia_publica', newCfg);
+      setConfig(newCfg);
+      setShowConfigModal(false);
+      showToast('Configuración de enlaces y Wi-Fi guardada para todos ✓');
+    } catch (e: any) {
+      showToast(`No se pudo guardar: ${e?.message || e}`);
+    }
   };
 
   // Conteo de reservas válidas (sin bloqueos iCal ni canceladas)

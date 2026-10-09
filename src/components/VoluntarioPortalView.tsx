@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { hoyIso, isoLocal } from '../services/fechas';
 import { VolunteerId, VolunteerTask, Reserva, CabinCode, CabinCleaningStatus, CabinStatusInfo } from '../types';
 import { 
   VOLUNTEER_TASK_META, 
@@ -60,7 +61,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
   onUpdateCabinStatus,
   onRequestSwitchToAdmin,
 }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = hoyIso();
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [activeTab, setActiveTab] = useState<'mis_tareas' | 'calendario_completo' | 'ocupacion_cabanas'>('mis_tareas');
   
@@ -116,7 +117,7 @@ export const VoluntarioPortalView: React.FC<VoluntarioPortalViewProps> = ({
     return Array.from({ length: 14 }, (_, i) => {
       const iter = new Date(d);
       iter.setDate(d.getDate() + i);
-      const iso = iter.toISOString().split('T')[0];
+      const iso = isoLocal(iter);
       return {
         iso,
         dayNum: iter.getDate(),

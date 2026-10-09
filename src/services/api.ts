@@ -1,491 +1,370 @@
-import { Reserva, Gasto, CabinCode } from '../types';
-import { SB_URL, SB_KEY, SB_HDR, SB_TABLE, SB_TABLE_G, CABANAS, DN } from './cabinConfig';
-import { detectCabinFromText, cleanGuestName } from './calendarImportParser';
+import { Reserva, Gasto, VolunteerTask, CabinStatusInfo, CabinCode } from '../types';
+import { supabase, tokenActual } from './supabase';
+import { esBloqueo } from './reservaUtils';
+import { cfg } from './settings';
+import { hoyIso } from './fechas';
+import { feedsDesdeConfig, parsearIcal, planificarSync, ResultadoFeed, PlanSync } from './icalSync';
 
-export const DEFAULT_GCAL_FEED_URL = 'https://calendar.google.com/calendar/ical/fercpiccini%40gmail.com/private-540fbe0c8511c3c26df8e140fc8e757b/basic.ics';
+/**
+ * Capa de datos. Reglas nuevas:
+ *  - Supabase es la ÚNICA fuente de verdad.
+ *  - Cada cambio se guarda de a UNA fila (antes se re-subía la lista entera en cada cambio
+ *    y desde cualquier navegador, pisando o resucitando datos).
+ *  - Lo que se guarda en el navegador es solo una copia para mostrar si no hay conexión.
+ *    Nunca se sube a la base.
+ */
 
-// Exact columns present in the Supabase 'reservas_bananos' table
+const CACHE_RESERVAS = 'lb_bananos_v2_cache_reservas';
+
 const DB_COLUMNS = [
-  'id',
-  'depto',
-  'huesped',
-  'tel',
-  'nac',
-  'checkin',
-  'checkout',
-  'precio',
-  'pax',
-  'plus',
-  'plataforma',
-  'destino',
-  'estado',
-  'notas',
-  'early',
-  'late',
-  'sena',
-  'saldo',
-  'creado',
-  'limpio',
-  'comision',
+  'id', 'depto', 'huesped', 'tel', 'nac', 'checkin', 'checkout', 'precio', 'pax', 'plus', 'plataforma',
+  'destino', 'estado', 'notas', 'early', 'late', 'sena', 'saldo', 'creado', 'limpio', 'comision',
+  'ical_uid', 'origen',
 ] as const;
 
-function sanitizeReservaForDb(r: Partial<Reserva>): Record<string, any> {
-  const precio = typeof r.precio === 'number' ? r.precio : (parseFloat(String(r.precio)) || 0);
-  const plus = typeof r.plus === 'number' ? r.plus : (parseFloat(String(r.plus)) || 0);
-  const pax = parseInt(String(r.pax || 2), 10) || 2;
-  const sena = typeof r.sena === 'number' ? r.sena : (parseFloat(String(r.sena)) || 0);
-  const saldo = typeof r.saldo === 'number' ? r.saldo : (parseFloat(String(r.saldo)) || 0);
-  const comision = r.comision !== undefined && r.comision !== null && !isNaN(Number(r.comision)) ? Number(r.comision) : null;
+const num = (v: unknown, def = 0) => {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+  return isNaN(n) ? def : n;
+};
 
-  // Preserve custom currency in notas if it differs from the platform default
+export function reservaADb(r: Partial<Reserva>): Record<string, any> {
   let notas = (r.notas || '').trim();
-  if (r.moneda === 'USD' && r.plataforma !== 'Airbnb' && !notas.includes('[USD]')) {
-    notas = `${notas} [USD]`.trim();
-  } else if (r.moneda === 'ARS' && r.plataforma === 'Airbnb' && !notas.includes('[ARS]')) {
-    notas = `${notas} [ARS]`.trim();
-  }
+  if (r.moneda === 'USD' && r.plataforma !== 'Airbnb' && !notas.includes('[USD]')) notas = `${notas} [USD]`.trim();
+  else if (r.moneda === 'ARS' && r.plataforma === 'Airbnb' && !notas.includes('[ARS]')) notas = `${notas} [ARS]`.trim();
+  else if (r.moneda === 'ARS') notas = notas.replace(/\s*\[USD\]/g, '').trim();
+  else if (r.moneda === 'USD') notas = notas.replace(/\s*\[ARS\]/g, '').trim();
 
   const row: Record<string, any> = {
-    id: String(r.id || (Date.now().toString(36) + Math.random().toString(36).substr(2, 4))),
+    id: String(r.id || nuevoId('res')),
     depto: r.depto || 'C2',
     huesped: (r.huesped || '').trim(),
     tel: (r.tel || '').trim(),
     nac: (r.nac || '').trim(),
     checkin: r.checkin || '',
     checkout: r.checkout || '',
-    precio: isNaN(precio) ? 0 : precio,
-    pax: pax,
-    plus: isNaN(plus) ? 0 : plus,
+    precio: num(r.precio),
+    pax: parseInt(String(r.pax || 2), 10) || 2,
+    plus: num(r.plus),
     plataforma: r.plataforma || 'Directo',
     destino: r.destino || '',
     estado: r.estado || 'Confirmada',
-    notas: notas,
+    notas,
     early: Boolean(r.early),
     late: Boolean(r.late),
-    sena: isNaN(sena) ? 0 : sena,
-    saldo: isNaN(saldo) ? 0 : saldo,
+    sena: num(r.sena),
+    saldo: num(r.saldo),
     creado: r.creado || new Date().toISOString(),
     limpio: Boolean(r.limpio),
-    comision: comision,
+    comision: r.comision !== undefined && r.comision !== null && !isNaN(Number(r.comision)) ? Number(r.comision) : null,
+    ical_uid: r.icalRef || null,
+    origen: r.origen || null,
   };
-
-  // Ensure ONLY valid Supabase columns are present in the object sent to Postgres
-  const cleanRow: Record<string, any> = {};
-  for (const col of DB_COLUMNS) {
-    cleanRow[col] = row[col];
-  }
-  return cleanRow;
+  const limpio: Record<string, any> = {};
+  for (const c of DB_COLUMNS) limpio[c] = row[c];
+  return limpio;
 }
 
-function parseReservaFromDb(r: any): Reserva {
+export function reservaDesdeDb(r: any): Reserva {
   const notas = r.notas || '';
   let moneda: 'ARS' | 'USD' = r.plataforma === 'Airbnb' ? 'USD' : 'ARS';
-  if (notas.includes('[USD]')) {
-    moneda = 'USD';
-  } else if (notas.includes('[ARS]')) {
-    moneda = 'ARS';
-  }
+  if (notas.includes('[USD]')) moneda = 'USD';
+  else if (notas.includes('[ARS]')) moneda = 'ARS';
 
-  const precio = typeof r.precio === 'number' ? r.precio : (parseFloat(String(r.precio)) || 0);
-  const plus = typeof r.plus === 'number' ? r.plus : (parseFloat(String(r.plus)) || 0);
-  const pax = parseInt(String(r.pax || 2), 10) || 2;
-  const sena = typeof r.sena === 'number' ? r.sena : (parseFloat(String(r.sena)) || 0);
-  const saldo = typeof r.saldo === 'number' ? r.saldo : (parseFloat(String(r.saldo)) || 0);
-
-  const isLockPlaceholder = 
-    typeof r.id === 'string' && 
-    r.id.startsWith('ical-') && 
-    notas.includes('Bloqueo iCal') && 
-    precio === 0 && 
-    (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
-
-  return {
+  const base: Reserva = {
     ...r,
-    precio: isNaN(precio) ? 0 : precio,
-    plus: isNaN(plus) ? 0 : plus,
-    pax: pax,
-    sena: isNaN(sena) ? 0 : sena,
-    saldo: isNaN(saldo) ? 0 : saldo,
-    moneda: r.moneda || moneda,
-    icalUid: isLockPlaceholder ? r.id : undefined,
+    precio: num(r.precio),
+    plus: num(r.plus),
+    pax: parseInt(String(r.pax || 2), 10) || 2,
+    sena: num(r.sena),
+    saldo: num(r.saldo),
+    moneda,
+    icalRef: r.ical_uid || undefined,
+    origen: r.origen || undefined,
   };
+  delete (base as any).ical_uid;
+  base.icalUid = esBloqueo(base) ? r.ical_uid || r.id : undefined;
+  return base;
 }
 
-export async function fetchReservas(): Promise<Reserva[]> {
-  let local: Reserva[] = [];
+export function nuevoId(prefijo: string): string {
+  return `${prefijo}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function errorLegible(error: any): Error {
+  const msg = error?.message || String(error);
+  if (/row-level security|permission denied|42501/i.test(msg)) {
+    return new Error('No tenés permiso para hacer esto con tu usuario.');
+  }
+  if (/Failed to fetch|NetworkError|network/i.test(msg)) {
+    return new Error('Sin conexión. El cambio NO se guardó; probá de nuevo.');
+  }
+  return new Error(msg);
+}
+
+/** Al salir, no dejar datos de huéspedes en el navegador (celulares compartidos). */
+export function limpiarCacheLocal() {
   try {
-    const localRaw = localStorage.getItem('bn_r');
-    if (localRaw) {
-      local = JSON.parse(localRaw).map(parseReservaFromDb);
-    }
+    localStorage.removeItem(CACHE_RESERVAS);
+    // Restos de la versión vieja (reservas, gastos, PINs, URLs secretas)
+    ['bn_r', 'bn_r_backup_safety', 'bn_g', 'bn_p', 'bn_remembered_user', 'bn_pin_fails', 'bn_pin_lock_until'].forEach(k => localStorage.removeItem(k));
   } catch (_) {}
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?select=*&order=creado.asc`, {
-      headers: SB_HDR,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const remoto: any[] = await res.json();
-      const parsedRemoto = remoto.map(parseReservaFromDb);
-
-      // Smart Merge: Nunca pisar reservas creadas localmente que aún no hayan impactado en remoto
-      const remoteIds = new Set(parsedRemoto.map(r => r.id));
-      const localUnsynced = local.filter(l => !remoteIds.has(l.id) && !l.id.startsWith('ical-'));
-
-      let finalReservas = parsedRemoto;
-      if (localUnsynced.length > 0) {
-        finalReservas = [...parsedRemoto, ...localUnsynced];
-        saveReservas(finalReservas).catch(err => console.warn('Error sincronizando reservas locales a Supabase:', err));
-      }
-
-      localStorage.setItem('bn_r', JSON.stringify(finalReservas));
-      try {
-        localStorage.setItem('bn_r_backup_safety', JSON.stringify(finalReservas));
-      } catch (_) {}
-
-      return finalReservas;
-    }
-  } catch (err) {
-    console.warn('Supabase no disponible o timeout, usando localStorage:', err);
-  }
-  return local;
 }
 
-export async function saveReservas(data: Reserva[]): Promise<boolean> {
-  // Always save complete state to localStorage for offline reliability and immediate UI responsiveness
-  localStorage.setItem('bn_r', JSON.stringify(data));
+// ---------------------------------------------------------------- Reservas
+
+export async function fetchReservas(): Promise<{ reservas: Reserva[]; sinConexion: boolean }> {
+  const { data, error } = await supabase.from('reservas_bananos').select('*').order('checkin', { ascending: true });
+  if (error) {
+    let cache: Reserva[] = [];
+    try {
+      cache = JSON.parse(localStorage.getItem(CACHE_RESERVAS) || '[]');
+    } catch (_) {}
+    if (cache.length) return { reservas: cache, sinConexion: true };
+    throw errorLegible(error);
+  }
+  const reservas = (data || []).map(reservaDesdeDb);
   try {
-    localStorage.setItem('bn_r_backup_safety', JSON.stringify(data));
+    localStorage.setItem(CACHE_RESERVAS, JSON.stringify(reservas));
   } catch (_) {}
-
-  // Sanitize exact payload for Supabase database table
-  const dbPayload = data.map(sanitizeReservaForDb);
-
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}`, {
-      method: 'POST',
-      headers: {
-        ...SB_HDR,
-        Prefer: 'resolution=merge-duplicates,return=minimal',
-      },
-      body: JSON.stringify(dbPayload),
-    });
-
-    if (res.ok) {
-      return true;
-    } else {
-      const errText = await res.text();
-      console.error('Error guardando en Supabase reservas (status ' + res.status + '):', errText);
-    }
-  } catch (err) {
-    console.error('Error de red guardando en Supabase:', err);
-  }
-  return false;
+  return { reservas, sinConexion: false };
 }
 
-// Eliminación puntual y segura de una única reserva (NUNCA borra en bloque)
-export async function deleteReservaFromDb(id: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=eq.${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: SB_HDR,
-    });
-    return res.ok;
-  } catch (err) {
-    console.error('Error eliminando reserva en Supabase:', err);
-    return false;
-  }
+export async function guardarReserva(r: Partial<Reserva>): Promise<Reserva> {
+  const fila = reservaADb(r);
+  const { data, error } = await supabase.from('reservas_bananos').upsert(fila, { onConflict: 'id' }).select().single();
+  if (error) throw errorLegible(error);
+  return reservaDesdeDb(data);
 }
 
-// Limpieza total explícita (solo cuando el usuario escribe "BORRAR" en el modal)
-export async function clearAllReservasFromDb(): Promise<boolean> {
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=neq.placeholder_none`, {
-      method: 'DELETE',
-      headers: SB_HDR,
-    });
-    return res.ok;
-  } catch (err) {
-    console.error('Error vaciando reservas en Supabase:', err);
-    return false;
-  }
+export async function insertarReservas(lista: Partial<Reserva>[]): Promise<number> {
+  if (!lista.length) return 0;
+  const filas = lista.map(reservaADb);
+  const { error } = await supabase.from('reservas_bananos').insert(filas);
+  if (error) throw errorLegible(error);
+  return filas.length;
 }
+
+export async function eliminarReserva(id: string): Promise<void> {
+  const { error } = await supabase.from('reservas_bananos').delete().eq('id', id);
+  if (error) throw errorLegible(error);
+}
+
+export async function eliminarReservas(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await supabase.from('reservas_bananos').delete().in('id', ids);
+  if (error) throw errorLegible(error);
+}
+
+// ---------------------------------------------------------------- Gastos
 
 export async function fetchGastos(): Promise<Gasto[]> {
-  let local: Gasto[] = [];
+  const { data, error } = await supabase.from('gastos_bananos').select('*').order('fecha', { ascending: false });
+  if (error) throw errorLegible(error);
+  return (data || []).map(g => ({ ...g, monto: num(g.monto) }));
+}
+
+export async function guardarGasto(g: Gasto): Promise<void> {
+  const { error } = await supabase.from('gastos_bananos').upsert(g, { onConflict: 'id' });
+  if (error) throw errorLegible(error);
+}
+
+export async function eliminarGasto(id: string): Promise<void> {
+  const { error } = await supabase.from('gastos_bananos').delete().eq('id', id);
+  if (error) throw errorLegible(error);
+}
+
+// ---------------------------------------------------------------- Tareas de voluntarios
+
+export async function fetchTareas(): Promise<VolunteerTask[]> {
+  const { data, error } = await supabase.from('bananos_tareas').select('*');
+  if (error) throw errorLegible(error);
+  return (data || []).map(t => ({
+    id: t.id,
+    voluntarioId: t.voluntario_id,
+    fecha: t.fecha,
+    titulo: t.titulo,
+    tipo: t.tipo,
+    completada: t.completada,
+    horario: t.horario || undefined,
+    notas: t.notas || undefined,
+    depto: t.depto || undefined,
+  }));
+}
+
+export async function guardarTarea(t: VolunteerTask): Promise<void> {
+  const { error } = await supabase.from('bananos_tareas').upsert(
+    {
+      id: t.id,
+      voluntario_id: t.voluntarioId,
+      fecha: t.fecha,
+      titulo: t.titulo || '',
+      tipo: t.tipo || 'otro',
+      completada: Boolean(t.completada),
+      horario: t.horario || null,
+      notas: t.notas || null,
+      depto: t.depto || null,
+      actualizado: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  );
+  if (error) throw errorLegible(error);
+}
+
+export async function marcarTarea(id: string, completada: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('bananos_tareas')
+    .update({ completada, actualizado: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw errorLegible(error);
+}
+
+export async function eliminarTarea(id: string): Promise<void> {
+  const { error } = await supabase.from('bananos_tareas').delete().eq('id', id);
+  if (error) throw errorLegible(error);
+}
+
+// ---------------------------------------------------------------- Semáforo de limpieza
+
+export async function fetchEstadosCabanas(): Promise<Partial<Record<CabinCode, CabinStatusInfo>>> {
+  const { data, error } = await supabase.from('bananos_estado_cabanas').select('*');
+  if (error) throw errorLegible(error);
+  const out: Partial<Record<CabinCode, CabinStatusInfo>> = {};
+  (data || []).forEach(e => {
+    out[e.depto as CabinCode] = {
+      depto: e.depto,
+      status: e.status,
+      updatedAt: e.updated_at,
+      updatedBy: e.updated_by || undefined,
+      notas: e.notas || undefined,
+    };
+  });
+  return out;
+}
+
+export async function guardarEstadoCabana(info: CabinStatusInfo): Promise<void> {
+  const { error } = await supabase.from('bananos_estado_cabanas').upsert(
+    {
+      depto: info.depto,
+      status: info.status,
+      updated_at: new Date().toISOString(),
+      updated_by: info.updatedBy || null,
+      notas: info.notas || null,
+    },
+    { onConflict: 'depto' }
+  );
+  if (error) throw errorLegible(error);
+}
+
+// ---------------------------------------------------------------- iCal
+
+// La app se publica en GitHub Pages (sin servidor propio). Para leer calendarios externos
+// sin problemas de CORS se usa el worker de Cloudflare de la cuenta (icalproxy). Si algún día
+// la app corre con el servidor Express, primero se intenta /api/fetch-ical (requiere sesión).
+const PROXY_ICAL = 'https://icalproxy.huuventa.workers.dev/?url=';
+
+const ES_ICAL_PERMITIDO = (u: string) => {
   try {
-    const localRaw = localStorage.getItem('bn_g');
-    if (localRaw) {
-      local = JSON.parse(localRaw);
+    const h = new URL(u).hostname;
+    return ['calendar.google.com', 'airbnb.com', 'airbnb.com.ar', 'airbnb.com.br', 'airbnb.es', 'booking.com'].some(d => h === d || h.endsWith('.' + d));
+  } catch {
+    return false;
+  }
+};
+
+/** Descarga un .ics (Google Calendar, Airbnb o Booking). */
+export async function fetchIcalFromUrl(url: string): Promise<string> {
+  const limpia = url.trim();
+  if (!limpia) throw new Error('URL vacía');
+  if (!/^https:\/\//i.test(limpia) || !ES_ICAL_PERMITIDO(limpia)) {
+    throw new Error('Solo se aceptan calendarios de Google Calendar, Airbnb o Booking (https).');
+  }
+
+  // 1) Servidor propio, si existe
+  try {
+    const token = await tokenActual();
+    const res = await fetch(`/api/fetch-ical?url=${encodeURIComponent(limpia)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) {
+      const texto = await res.text();
+      if (texto.includes('BEGIN:VCALENDAR')) return texto;
     }
   } catch (_) {}
 
+  // 2) Worker de Cloudflare (GitHub Pages)
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE_G}?select=*&order=fecha.desc`, {
-      headers: SB_HDR,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
+    const res = await fetch(PROXY_ICAL + encodeURIComponent(limpia));
     if (res.ok) {
-      const remoto: Gasto[] = await res.json();
-      if (remoto.length === 0 && local.length > 0) {
-        return local;
-      }
-      localStorage.setItem('bn_g', JSON.stringify(remoto));
-      return remoto;
+      const texto = await res.text();
+      if (texto.includes('BEGIN:VCALENDAR')) return texto;
     }
-  } catch (err) {
-    console.warn('Supabase gastos no disponible o timeout, usando local:', err);
-  }
-  return local;
+  } catch (_) {}
+
+  throw new Error('No se pudo leer el calendario. Verificá que sea la "Dirección secreta en formato iCal" (termina en .ics) y que siga vigente.');
 }
 
-export async function saveGastos(data: Gasto[]): Promise<boolean> {
-  localStorage.setItem('bn_g', JSON.stringify(data));
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE_G}`, {
-      method: 'POST',
-      headers: {
-        ...SB_HDR,
-        Prefer: 'resolution=merge-duplicates,return=minimal',
-      },
-      body: JSON.stringify(data),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error('Error guardando gastos en Supabase:', err);
-  }
-  return false;
-}
-
-// Eliminación puntual y segura de un único gasto
-export async function deleteGastoFromDb(id: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/${SB_TABLE_G}?id=eq.${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: SB_HDR,
-    });
-    return res.ok;
-  } catch (err) {
-    console.error('Error eliminando gasto en Supabase:', err);
-    return false;
-  }
-}
-
-// iCal synchronization
-export function parseIcal(text: string, plat: string): Array<{ ci: string; co: string; summary: string; uid: string }> {
-  const blocks = text.split('BEGIN:VEVENT');
-  const events: Array<{ ci: string; co: string; summary: string; uid: string }> = [];
-  const today = new Date().toISOString().split('T')[0];
-
-  for (let i = 1; i < blocks.length; i++) {
-    const b = blocks[i];
-    const getVal = (key: string) => {
-      const m = b.match(new RegExp(key + '(?:;[^:]*)?:([^\\r\\n]+)'));
-      return m ? m[1].trim() : null;
-    };
-
-    const status = getVal('STATUS');
-    if (status && status.toUpperCase() === 'CANCELLED') continue;
-
-    const dtstart = getVal('DTSTART');
-    const dtend = getVal('DTEND');
-    const summary = getVal('SUMMARY') || 'Bloqueado';
-    const uid = getVal('UID') || `ical-${Math.random().toString(36).substr(2, 6)}`;
-
-    if (!dtstart || !dtend) continue;
-
-    const parseDate = (s: string) => {
-      if (!s) return null;
-      const clean = s.split(':').pop()?.replace(/T\d{6}Z?$/, '') || '';
-      if (/^\d{8}$/.test(clean)) {
-        return `${clean.substr(0, 4)}-${clean.substr(4, 2)}-${clean.substr(6, 2)}`;
-      }
-      return clean;
-    };
-
-    const ci = parseDate(dtstart);
-    const co = parseDate(dtend);
-    if (!ci || !co) continue;
-
-    if (plat === 'airbnb') {
-      const isAuto =
-        summary.toLowerCase().includes('not available') ||
-        summary.toLowerCase().includes('no disponible') ||
-        summary.toLowerCase().includes('bloqueado');
-      const isSingleDay = ci === co || new Date(co).getTime() - new Date(ci).getTime() <= 86400000;
-      if (isAuto || isSingleDay || co <= today) continue;
-    } else {
-      if (co <= today) continue;
-    }
-    events.push({ ci, co, summary, uid });
-  }
-  return events;
+export interface ResumenSync {
+  creados: number;
+  actualizados: number;
+  borrados: number;
+  sinCabana: PlanSync['sinCabana'];
+  feedsConError: string[];
+  feeds: number;
 }
 
 /**
- * Descarga el contenido iCal (.ics) desde una URL (Google Calendar, Airbnb, Booking)
- * usando el backend proxy para evitar restricciones CORS
+ * Sincroniza todos los feeds configurados contra la base.
+ * Siempre parte de los datos frescos de Supabase (no de lo que haya en pantalla).
  */
-export async function fetchIcalFromUrl(targetUrl: string): Promise<string> {
-  const cleanUrl = targetUrl.trim();
-  if (!cleanUrl) throw new Error('URL vacía');
+export async function sincronizarIcal(): Promise<ResumenSync> {
+  const feeds = feedsDesdeConfig(cfg<Record<string, string>>('ical_urls', {}));
+  if (!feeds.length) return { creados: 0, actualizados: 0, borrados: 0, sinCabana: [], feedsConError: [], feeds: 0 };
 
-  // 1. Probar primero el endpoint local del servidor Express
-  try {
-    const res = await fetch(`/api/fetch-ical?url=${encodeURIComponent(cleanUrl)}`);
-    if (res.ok) {
-      const text = await res.text();
-      if (text.includes('BEGIN:VCALENDAR')) return text;
-    }
-  } catch (e) {
-    console.warn('Fallo proxy local /api/fetch-ical, intentando alternativo:', e);
+  const hoy = hoyIso();
+  const resultados: ResultadoFeed[] = await Promise.all(
+    feeds.map(async feed => {
+      try {
+        const texto = await fetchIcalFromUrl(feed.url);
+        return { feed, eventos: parsearIcal(texto, feed.fuente, hoy) };
+      } catch (e: any) {
+        return { feed, eventos: null, error: e?.message };
+      }
+    })
+  );
+
+  const { reservas, sinConexion } = await fetchReservas();
+  if (sinConexion) throw new Error('Sin conexión con la base: no se sincronizó nada.');
+
+  const plan = planificarSync(reservas, resultados, hoy);
+
+  if (plan.upserts.length) {
+    const filas = plan.upserts.map(reservaADb);
+    const { error } = await supabase.from('reservas_bananos').upsert(filas, { onConflict: 'id' });
+    if (error) throw errorLegible(error);
   }
+  if (plan.borrar.length) await eliminarReservas(plan.borrar);
 
-  // 2. Fallback a proxy Cloudflare Worker
-  try {
-    const proxyUrl = `https://icalproxy.huuventa.workers.dev/?url=${encodeURIComponent(cleanUrl)}`;
-    const res = await fetch(proxyUrl);
-    if (res.ok) {
-      const text = await res.text();
-      if (text.includes('BEGIN:VCALENDAR')) return text;
-    }
-  } catch (e) {
-    console.warn('Fallo proxy secundario Cloudflare:', e);
-  }
-
-  // 3. Intento directo
-  try {
-    const res = await fetch(cleanUrl);
-    if (res.ok) {
-      const text = await res.text();
-      if (text.includes('BEGIN:VCALENDAR')) return text;
-    }
-  } catch (e) {
-    console.warn('Fallo fetch directo:', e);
-  }
-
-  throw new Error('No se pudo obtener el calendario desde la URL provista. Verificá que el enlace sea una "Dirección secreta en formato iCal" válida que termine en .ics');
+  return {
+    creados: plan.creados,
+    actualizados: plan.actualizados,
+    borrados: plan.borrar.length,
+    sinCabana: plan.sinCabana,
+    feedsConError: plan.feedsConError,
+    feeds: feeds.length,
+  };
 }
 
-export async function syncIcalFeeds(currentReservas: Reserva[]): Promise<{ count: number; updatedReservas: Reserva[] }> {
-  const savedUrlsRaw = localStorage.getItem('bn_ical');
-  const urls: Record<string, string> = savedUrlsRaw ? JSON.parse(savedUrlsRaw) : {};
-  const tasks: Array<{ code: string; url: string; src: string }> = [];
+// ---------------------------------------------------------------- Público (sin login)
 
-  CABANAS.forEach(code => {
-    if (urls['ab_' + code]) tasks.push({ code, url: urls['ab_' + code], src: 'airbnb' });
-    if (urls['bk_' + code]) tasks.push({ code, url: urls['bk_' + code], src: 'booking' });
-    if (urls['gc_' + code]) tasks.push({ code, url: urls['gc_' + code], src: 'google' });
-  });
+/** Cabañas ocupadas en un rango, sin datos personales (para la landing). */
+export async function fetchOcupadas(desde: string, hasta: string): Promise<string[]> {
+  const { data, error } = await supabase.rpc('bananos_ocupadas', { p_desde: desde, p_hasta: hasta });
+  if (error) throw errorLegible(error);
+  return (data || []).map((r: any) => r.depto);
+}
 
-  const generalUrl = urls['gc_general'] || DEFAULT_GCAL_FEED_URL;
-  if (generalUrl) {
-    tasks.push({ code: 'general', url: generalUrl, src: 'google' });
-  }
-
-  if (!tasks.length) {
-    return { count: 0, updatedReservas: currentReservas };
-  }
-
-  let nuevasReservas = [...currentReservas];
-  const today = new Date().toISOString().split('T')[0];
-  let totalBloqueos = 0;
-
-  for (const t of tasks) {
-    try {
-      const text = await fetchIcalFromUrl(t.url);
-      if (!text.includes('BEGIN:VCALENDAR')) continue;
-
-      const events = parseIcal(text, t.src);
-      // Remove ONLY unpriced lock placeholders for this cabin (never touch reservations with guest names, prices, or user edits)
-      nuevasReservas = nuevasReservas.filter(r => {
-        if (t.code !== 'general' && r.depto !== t.code) return true;
-        const isSyntheticLock = 
-          (r.icalUid || (r.id && r.id.startsWith('ical-'))) &&
-          (!r.precio || r.precio === 0) &&
-          (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
-        return !isSyntheticLock;
-      });
-
-      events.forEach(ev => {
-        if (ev.co < today) return;
-        
-        let targetCabin: CabinCode = 'C2';
-        let detectedGuestName = ev.summary;
-
-        if (t.code === 'general') {
-          const detected = detectCabinFromText(ev.summary);
-          targetCabin = detected.cabin;
-          detectedGuestName = cleanGuestName(ev.summary) || ev.summary;
-        } else {
-          targetCabin = t.code as CabinCode;
-        }
-
-        const conflict = nuevasReservas.find(
-          r =>
-            r.depto === targetCabin &&
-            r.estado !== 'Cancelada' &&
-            r.estado !== 'Non show' &&
-            r.estado !== 'Devolución' &&
-            !(ev.co <= r.checkin || ev.ci >= r.checkout)
-        );
-
-        // Only create an automated lock if there is no confirmed/priced reservation occupying those dates
-        if (!conflict) {
-          const isGenericBlock =
-            ev.summary.includes('Not available') ||
-            ev.summary.includes('Bloqueado') ||
-            ev.summary.toLowerCase().includes('no disponible');
-
-          const guestDisplay = isGenericBlock
-            ? '🔒 Bloqueado'
-            : (detectedGuestName.startsWith('🔒') ? detectedGuestName : `🔒 ${detectedGuestName}`);
-
-          let plat = t.src === 'booking' ? 'Booking' : t.src === 'airbnb' ? 'Airbnb' : 'Google';
-          if (ev.summary.toLowerCase().includes('airbnb')) plat = 'Airbnb';
-          if (ev.summary.toLowerCase().includes('booking')) plat = 'Booking';
-
-          nuevasReservas.push({
-            id: 'ical-' + targetCabin + '-' + ev.uid.replace(/[^a-z0-9]/gi, '-').substr(0, 20),
-            icalUid: ev.uid,
-            depto: targetCabin,
-            huesped: guestDisplay,
-            tel: '',
-            nac: '',
-            checkin: ev.ci,
-            checkout: ev.co,
-            precio: 0,
-            pax: 2,
-            plus: 0,
-            plataforma: plat as any,
-            destino: '',
-            estado: 'Confirmada',
-            notas: `Sincronización Google Calendar · ${ev.summary}`,
-            early: false,
-            late: false,
-            sena: 0,
-            saldo: 0,
-            creado: new Date().toISOString(),
-          });
-          totalBloqueos++;
-        }
-      });
-    } catch (err) {
-      console.warn(`Error en sync de feed ${t.code} ${t.src}:`, err);
-    }
-  }
-
-  await saveReservas(nuevasReservas);
-  return { count: totalBloqueos, updatedReservas: nuevasReservas };
+export async function fetchInfoPublica(): Promise<{ guia: Record<string, any>; xenia: Record<string, any> }> {
+  const { data, error } = await supabase.rpc('bananos_info_publica');
+  if (error) throw errorLegible(error);
+  return { guia: data?.guia || {}, xenia: data?.xenia || {} };
 }

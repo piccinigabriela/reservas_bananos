@@ -1,34 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { Reserva, Gasto, CabinCode, UserKey, AppView, VolunteerTask, VolunteerId, CabinCleaningStatus, CabinStatusInfo } from './types';
-import { 
-  fetchReservas, 
-  saveReservas, 
-  fetchGastos, 
-  saveGastos, 
-  syncIcalFeeds,
-  deleteReservaFromDb,
-  clearAllReservasFromDb,
-  deleteGastoFromDb
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { Reserva, Gasto, CabinCode, AppView, VolunteerTask, VolunteerId, CabinCleaningStatus, CabinStatusInfo } from './types';
+import {
+  fetchReservas,
+  guardarReserva,
+  insertarReservas,
+  eliminarReserva,
+  eliminarReservas,
+  fetchGastos,
+  guardarGasto,
+  eliminarGasto,
+  fetchTareas,
+  guardarTarea,
+  eliminarTarea,
+  marcarTarea,
+  fetchEstadosCabanas,
+  guardarEstadoCabana,
+  sincronizarIcal,
+  limpiarCacheLocal,
 } from './services/api';
-import { 
-  CABANAS, 
-  DN, 
-  DC, 
-  getVolunteerTasks, 
-  saveVolunteerTasks, 
-  getVolunteerNames,
-  getCabinCleaningStatuses,
-  saveCabinCleaningStatuses,
-  updateCabinCleaningStatus,
-  getEffectiveCabinStatuses
-} from './services/cabinConfig';
+import { CABANAS, DN, getVolunteerNames, getEffectiveCabinStatuses } from './services/cabinConfig';
+import { supabase, rolDelUsuario, BananosRol } from './services/supabase';
+import { cargarConfig, migrarConfigLegadoSiFalta, suscribirConfig } from './services/settings';
+import { esBloqueo, nombreClave, seSuperponen } from './services/reservaUtils';
 import { Header } from './components/Header';
 import { CalendarTimeline } from './components/CalendarTimeline';
 import { FichaReservaModal } from './components/FichaReservaModal';
 import { ReservaFormModal } from './components/ReservaFormModal';
 import { AssignCabinModal } from './components/AssignCabinModal';
 import { GoogleCalendarImportModal } from './components/GoogleCalendarImportModal';
-import { ConfirmClearReservasModal } from './components/ConfirmClearReservasModal';
 import { UnlockAdminModal } from './components/UnlockAdminModal';
 import { VolunteerTaskModal } from './components/VolunteerTaskModal';
 import { PinLogin } from './components/PinLogin';
@@ -42,509 +42,431 @@ import { ConfigView } from './components/AdminViews/ConfigView';
 import { XeniaMulticanalView } from './components/AdminViews/XeniaMulticanalView';
 import { LandingPageView } from './components/LandingPageView';
 import { GuestWelcomeView } from './components/GuestWelcomeView';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, WifiOff } from 'lucide-react';
+
+const CLAVE_ULTIMO_SYNC = 'lb_bananos_v2_ultimo_sync';
+const MINUTOS_ENTRE_SYNC_AUTO = 15;
+
+/** Vista que está mirando el propietario (puede previsualizar recepción o un voluntario). */
+type Vista = 'propia' | 'recepcion' | 'vol1' | 'vol2';
+
+function leerLocal(clave: string): string | null {
+  try {
+    return localStorage.getItem(clave);
+  } catch (_) {
+    return null;
+  }
+}
+function guardarLocal(clave: string, valor: string) {
+  try {
+    localStorage.setItem(clave, valor);
+  } catch (_) {}
+}
 
 export default function App() {
-  // Autenticación / PIN
-  const [currentUser, setCurrentUser] = useState<UserKey | null>(() => {
-    return (localStorage.getItem('bn_remembered_user') as UserKey) || null;
-  });
+  // ---------------------------------------------------------------- Sesión
+  const [session, setSession] = useState<Session | null>(null);
+  const [sesionLista, setSesionLista] = useState(false);
+  const [rol, setRol] = useState<BananosRol | null>(null);
+  const [errorRol, setErrorRol] = useState<string | null>(null);
+  const esAdmin = rol === 'admin';
+  const puedeEditar = rol === 'admin' || rol === 'recepcion';
 
-  // Modo de visualización: 'focus' (solo calendario + formulario) vs 'advanced' (panel completo)
-  const [viewMode, setViewMode] = useState<'focus' | 'advanced'>(() => {
-    const saved = localStorage.getItem('bn_view_mode');
-    return (saved as 'focus' | 'advanced') || 'focus';
-  });
+  useEffect(() => {
+    const aplicar = async (s: Session | null) => {
+      setSession(s);
+      try {
+        setRol(await rolDelUsuario(s));
+        setErrorRol(null);
+      } catch (e: any) {
+        setRol(null);
+        setErrorRol(s ? 'No se pudo verificar tu usuario. Revisá la conexión y volvé a intentar.' : null);
+      }
+      setSesionLista(true);
+    };
+    supabase.auth.getSession().then(({ data }) => aplicar(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((evento, s) => {
+      // Al refrescar el token no hace falta volver a consultar el rol
+      if (evento === 'TOKEN_REFRESHED') {
+        setSession(s);
+        return;
+      }
+      // Diferido para no llamar a Supabase dentro del callback de auth
+      setTimeout(() => aplicar(s), 0);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
-  // Tema: Modo Claro o Modo Oscuro
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('bn_theme');
-    return (saved as 'dark' | 'light') || 'light';
-  });
-
-  // Pestaña activa (solo relevante si está en modo advanced y modo propietario)
+  // ---------------------------------------------------------------- Preferencias de este dispositivo
+  const [vista, setVista] = useState<Vista>('propia');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (leerLocal('bn_theme') as 'dark' | 'light') || 'light');
   const [currentTab, setCurrentTab] = useState<AppView>('calendario');
+  const [isDyslexiaMode, setIsDyslexiaMode] = useState<boolean>(() => leerLocal('bn_dyslexia') === 'true');
+  const isDarkMode = theme === 'dark';
 
-  // Modo accesible para dislexia
-  const [isDyslexiaMode, setIsDyslexiaMode] = useState<boolean>(() => {
-    return localStorage.getItem('bn_dyslexia') === 'true';
-  });
-
-  // Vista de Huéspedes (Landing Page pública de reservas)
+  // Vistas públicas (no cargan datos privados)
   const [isLandingMode, setIsLandingMode] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('reservas') || params.has('catalogo') || params.has('web');
   });
-
-  // Vista de Bienvenida del Huésped / Guía Digital con Xenia (Link directo para Huéspedes por WhatsApp)
   const [isGuestWelcomeOpen, setIsGuestWelcomeOpen] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const hash = window.location.hash.toLowerCase();
       const path = window.location.pathname.toLowerCase();
       return (
-        params.has('bienvenida') ||
-        params.has('guia') ||
-        params.has('guest') ||
-        params.has('huesped') ||
-        params.has('cabana') ||
-        params.has('depto') ||
-        hash.includes('guia') ||
-        hash.includes('bienvenida') ||
-        path.includes('guia') ||
-        path.includes('bienvenida')
+        params.has('bienvenida') || params.has('guia') || params.has('guest') || params.has('huesped') ||
+        params.has('cabana') || params.has('depto') || hash.includes('guia') || hash.includes('bienvenida') ||
+        path.includes('guia') || path.includes('bienvenida')
       );
     } catch (_) {
       return false;
     }
   });
+  const [openedFromAdmin, setOpenedFromAdmin] = useState(false);
 
-  // Saber si se abrió desde adentro del panel de administración
-  const [openedFromAdmin, setOpenedFromAdmin] = useState<boolean>(false);
-
-  // Datos
-  const [reservas, setReservas] = useState<Reserva[]>(() => {
-    try {
-      const raw = localStorage.getItem('bn_r');
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
-  });
-  const [gastos, setGastos] = useState<Gasto[]>(() => {
-    try {
-      const raw = localStorage.getItem('bn_g');
-      return raw ? JSON.parse(raw) : [];
-    } catch (_) {
-      return [];
-    }
-  });
-  const [volunteerTasks, setVolunteerTasks] = useState<VolunteerTask[]>(() => getVolunteerTasks());
+  // ---------------------------------------------------------------- Datos
+  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [volunteerTasks, setVolunteerTasks] = useState<VolunteerTask[]>([]);
   const [volunteerNames, setVolunteerNames] = useState<Record<VolunteerId, string>>(() => getVolunteerNames());
-  const [cabinStatuses, setCabinStatuses] = useState<Record<CabinCode, CabinStatusInfo>>(() => getCabinCleaningStatuses());
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    return !localStorage.getItem('bn_r');
-  });
-  const [isSyncingIcal, setIsSyncingIcal] = useState<boolean>(false);
+  const [cabinStatuses, setCabinStatuses] = useState<Partial<Record<CabinCode, CabinStatusInfo>>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [sinConexion, setSinConexion] = useState(false);
+  const [isSyncingIcal, setIsSyncingIcal] = useState(false);
+  const ultimaCarga = useRef(0);
 
   // Modales
   const [selectedReserva, setSelectedReserva] = useState<Reserva | null>(null);
   const [editingReserva, setEditingReserva] = useState<Reserva | null>(null);
-  const [isNewReservaOpen, setIsNewReservaOpen] = useState<boolean>(false);
+  const [isNewReservaOpen, setIsNewReservaOpen] = useState(false);
   const [assigningReserva, setAssigningReserva] = useState<Reserva | null>(null);
-  const [isGoogleCalendarOpen, setIsGoogleCalendarOpen] = useState<boolean>(false);
-  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState<boolean>(false);
-  const [isUnlockAdminOpen, setIsUnlockAdminOpen] = useState<boolean>(false);
-  const [volunteerModalSlot, setVolunteerModalSlot] = useState<{
-    volId: VolunteerId;
-    dateIso: string;
-    task?: VolunteerTask | null;
-  } | null>(null);
+  const [isGoogleCalendarOpen, setIsGoogleCalendarOpen] = useState(false);
+  const [isUnlockAdminOpen, setIsUnlockAdminOpen] = useState(false);
+  const [volunteerModalSlot, setVolunteerModalSlot] = useState<{ volId: VolunteerId; dateIso: string; task?: VolunteerTask | null } | null>(null);
 
-  // Toast
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-
-  const showToast = (msg: string, ok = true) => {
+  const showToast = useCallback((msg: string, ok = true) => {
     setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3500);
-  };
+    setTimeout(() => setToast(null), ok ? 3500 : 6000);
+  }, []);
+  const mostrarError = (prefijo: string, e: any) => showToast(`${prefijo}: ${e?.message || e}`, false);
 
-  const isReception = currentUser === 'recepcion' || currentUser === 'vol';
-  const isDarkMode = theme === 'dark';
+  useEffect(() => suscribirConfig(() => setVolunteerNames(getVolunteerNames())), []);
 
-  // Estado sincronizado e inteligente de cabañas en tiempo real (Hook en el nivel superior SIEMPRE)
+  const recargarReservas = useCallback(async () => {
+    const { reservas: lista, sinConexion: off } = await fetchReservas();
+    setReservas(lista);
+    setSinConexion(off);
+    ultimaCarga.current = Date.now();
+  }, []);
+
+  const cargarTodo = useCallback(async () => {
+    if (!rol) return;
+    try {
+      await cargarConfig();
+      if (rol === 'admin') {
+        const n = await migrarConfigLegadoSiFalta();
+        if (n > 0) showToast(`Se pasó la configuración de este dispositivo a la base (${n} ajustes) ✓`);
+      }
+      const [, tareas, estados, gastosDb] = await Promise.all([
+        recargarReservas(),
+        fetchTareas(),
+        fetchEstadosCabanas(),
+        rol === 'admin' ? fetchGastos() : Promise.resolve([] as Gasto[]),
+      ]);
+      setVolunteerTasks(tareas);
+      setCabinStatuses(estados);
+      setGastos(gastosDb);
+      setVolunteerNames(getVolunteerNames());
+    } catch (e) {
+      mostrarError('No se pudieron cargar los datos', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [rol, recargarReservas, showToast]);
+
+  const correrSync = useCallback(
+    async (manual: boolean) => {
+      if (!(rol === 'admin' || rol === 'recepcion')) return;
+      setIsSyncingIcal(true);
+      try {
+        const r = await sincronizarIcal();
+        guardarLocal(CLAVE_ULTIMO_SYNC, String(Date.now()));
+        await recargarReservas();
+        if (manual || r.creados || r.actualizados || r.borrados || r.feedsConError.length) {
+          if (!r.feeds) {
+            showToast('No hay calendarios configurados (Configuración → iCal).', false);
+          } else {
+            const partes = [
+              `${r.creados} nuevos`,
+              `${r.actualizados} actualizados`,
+              `${r.borrados} borrados`,
+            ];
+            let msg = `Calendarios sincronizados: ${partes.join(' · ')}`;
+            if (r.sinCabana.length) msg += ` · ${r.sinCabana.length} eventos de Google sin cabaña en el título`;
+            if (r.feedsConError.length) msg += ` · no se pudo leer: ${r.feedsConError.join(', ')}`;
+            showToast(msg, r.feedsConError.length === 0);
+          }
+        }
+      } catch (e) {
+        if (manual) mostrarError('Error al sincronizar', e);
+      } finally {
+        setIsSyncingIcal(false);
+      }
+    },
+    [rol, recargarReservas, showToast]
+  );
+
+  // Cargar al iniciar sesión (nunca en las vistas públicas)
+  useEffect(() => {
+    if (!sesionLista) return;
+    if (!rol) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    cargarTodo().then(() => {
+      const ultimo = Number(leerLocal(CLAVE_ULTIMO_SYNC) || 0);
+      if (Date.now() - ultimo > MINUTOS_ENTRE_SYNC_AUTO * 60_000) correrSync(false);
+    });
+  }, [sesionLista, rol, cargarTodo, correrSync]);
+
+  // Al volver a la app (cambiar de pestaña o desbloquear el celular), traer lo último
+  useEffect(() => {
+    if (!rol) return;
+    const alVolver = () => {
+      if (document.visibilityState === 'visible' && Date.now() - ultimaCarga.current > 60_000) {
+        cargarTodo();
+      }
+    };
+    document.addEventListener('visibilitychange', alVolver);
+    window.addEventListener('focus', alVolver);
+    return () => {
+      document.removeEventListener('visibilitychange', alVolver);
+      window.removeEventListener('focus', alVolver);
+    };
+  }, [rol, cargarTodo]);
+
+  // ---------------------------------------------------------------- Rol efectivo de la pantalla
+  const rolPantalla: BananosRol | null = esAdmin && vista !== 'propia' ? (vista as BananosRol) : rol;
+  const isReception = rolPantalla === 'recepcion';
+
   const effectiveCabinStatuses = React.useMemo(
     () => getEffectiveCabinStatuses(cabinStatuses, reservas, volunteerTasks),
     [cabinStatuses, reservas, volunteerTasks]
   );
 
-  // Cargar datos al iniciar
-  useEffect(() => {
-    const initLoad = async () => {
-      try {
-        const [loadedReservas, loadedGastos] = await Promise.all([
-          fetchReservas().catch(() => []),
-          fetchGastos().catch(() => []),
-        ]);
-        if (loadedReservas && loadedReservas.length > 0) {
-          setReservas(loadedReservas);
-        }
-        if (loadedGastos && loadedGastos.length > 0) {
-          setGastos(loadedGastos);
-        }
-        setVolunteerTasks(getVolunteerTasks());
-        setVolunteerNames(getVolunteerNames());
+  // ---------------------------------------------------------------- Acciones
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setRol(null);
+    limpiarCacheLocal();
+    setVista('propia');
+    setReservas([]);
+    setGastos([]);
+  };
 
-        // Sincronización en segundo plano de feeds iCal
-        syncIcalFeeds(loadedReservas).then(({ count, updatedReservas }) => {
-          if (count > 0) {
-            setReservas(updatedReservas);
-            saveReservas(updatedReservas).catch(err => console.warn('Error guardando sync iCal:', err));
-          }
-        }).catch(err => console.warn('Error syncIcalFeeds:', err));
-      } catch (err) {
-        console.error('Error initLoad:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initLoad();
-  }, []);
-
-  // Atajo maestro silencioso para Gabriela: escribir "1535" en cualquier momento
-  useEffect(() => {
-    let keyBuffer = '';
-    let timer: NodeJS.Timeout;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      if (
-        activeEl &&
-        (activeEl.tagName === 'INPUT' ||
-          activeEl.tagName === 'TEXTAREA' ||
-          (activeEl as HTMLElement).isContentEditable)
-      ) {
-        return;
-      }
-
-      if (e.key >= '0' && e.key <= '9') {
-        keyBuffer += e.key;
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          keyBuffer = '';
-        }, 3000);
-
-        if (keyBuffer.endsWith('1535') || keyBuffer.endsWith('1982')) {
-          keyBuffer = '';
-          setCurrentUser('admin');
-          setViewMode('advanced');
-          setIsLandingMode(false);
-          setIsGuestWelcomeOpen(false);
-          setIsUnlockAdminOpen(false);
-          localStorage.setItem('bn_remembered_user', 'admin');
-          showToast('Modo Propietario activado con acceso completo 👑');
-        } else if (keyBuffer.endsWith('0000')) {
-          keyBuffer = '';
-          setCurrentUser('recepcion');
-          setCurrentTab('calendario');
-          setIsLandingMode(false);
-          setIsGuestWelcomeOpen(false);
-          setIsUnlockAdminOpen(false);
-          localStorage.setItem('bn_remembered_user', 'recepcion');
-          showToast('Modo Día a Día (Recepción) activado 🌿');
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      clearTimeout(timer);
-    };
-  }, []);
-
-  // Alternar tema Dark/Light
   const handleToggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
-    localStorage.setItem('bn_theme', next);
-    showToast(next === 'dark' ? 'Modo Oscuro Charcoal activado' : 'Modo Claro activado');
+    guardarLocal('bn_theme', next);
   };
 
-  // Alternar modo dislexia
   const handleToggleDyslexia = () => {
     const next = !isDyslexiaMode;
     setIsDyslexiaMode(next);
-    localStorage.setItem('bn_dyslexia', String(next));
-    showToast(next ? 'Tipografía de lectura fácil activada' : 'Lectura normal activada');
+    guardarLocal('bn_dyslexia', String(next));
   };
 
-  // Alternar Modo Enfoque vs Panel Completo (en Modo Propietario)
-  const handleToggleViewMode = () => {
-    const next = viewMode === 'focus' ? 'advanced' : 'focus';
-    setViewMode(next);
-    localStorage.setItem('bn_view_mode', next);
-    if (next === 'focus') {
-      setCurrentTab('calendario');
-      showToast('Modo Enfoque: solo calendario y reservas 🌿');
-    } else {
-      showToast('Panel Completo: métricas, gastos y configuración activados ⚙️');
-    }
-  };
-
-  // Cambiar a Modo Día a Día (Recepción) con 1 clic
-  const handleSwitchToReception = () => {
-    setCurrentUser('recepcion');
-    localStorage.setItem('bn_remembered_user', 'recepcion');
-    setCurrentTab('calendario');
-    showToast('Modo Día a Día activado: solo calendario y cargas 🌿');
-  };
-
-  // Desbloqueo exitoso mediante PIN
-  const handleUnlockAdminSuccess = (role?: string) => {
-    const userRole: UserKey = role === 'recepcion' ? 'recepcion' : role === 'vol1' ? 'vol1' : 'admin';
-    setCurrentUser(userRole);
-    if (userRole === 'admin') {
-      setViewMode('advanced');
-    }
-    localStorage.setItem('bn_remembered_user', userRole);
-    setIsUnlockAdminOpen(false);
-    setIsGuestWelcomeOpen(false);
-    setIsLandingMode(false);
-    showToast(userRole === 'admin' ? 'Modo Propietario activado con acceso completo 👑' : userRole === 'recepcion' ? 'Modo Recepción activado 🌿' : 'Portal Voluntario activado 🧑‍🌾');
-  };
-
-  // Sincronización manual de iCal
-  const handleSyncIcalManual = async () => {
-    setIsSyncingIcal(true);
+  const handleSaveReserva = async (reservaData: Partial<Reserva>, opciones?: { reemplazarBloqueos?: string[] }) => {
     try {
-      const { count, updatedReservas } = await syncIcalFeeds(reservas);
-      setReservas(updatedReservas);
-      showToast(`iCal sincronizado: ${count} bloqueos actualizados ✓`, true);
-    } catch (err) {
-      showToast('Error al conectar con los feeds iCal', false);
-    } finally {
-      setIsSyncingIcal(false);
+      const guardada = await guardarReserva(reservaData);
+      const reemplazar = (opciones?.reemplazarBloqueos || []).filter(id => id !== guardada.id);
+      if (reemplazar.length) await eliminarReservas(reemplazar);
+      setReservas(prev => [...prev.filter(r => r.id !== guardada.id && !reemplazar.includes(r.id)), guardada]);
+      setIsNewReservaOpen(false);
+      setEditingReserva(null);
+      showToast('Reserva guardada ✓');
+    } catch (e) {
+      mostrarError('No se guardó la reserva', e);
     }
   };
 
-  // Guardar reserva (creación o edición)
-  const handleSaveReserva = async (reservaData: Partial<Reserva>) => {
-    const isSyntheticLock = (r: Reserva) =>
-      (r.id.startsWith('ical-') || Boolean(r.icalUid)) &&
-      (!r.precio || r.precio === 0) &&
-      (!r.huesped || r.huesped.startsWith('🔒') || r.huesped.toLowerCase().includes('bloqueado') || r.huesped.toLowerCase().includes('not available'));
-
-    // Eliminar bloqueos sintéticos que coincidan en cabaña y fechas
-    const baseList = reservas.filter(r => {
-      if (r.id === reservaData.id) return false;
-      if (
-        isSyntheticLock(r) &&
-        r.depto === reservaData.depto &&
-        reservaData.checkin &&
-        reservaData.checkout
-      ) {
-        const overlaps = !(reservaData.checkout <= r.checkin || reservaData.checkin >= r.checkout);
-        if (overlaps) return false; // Descartar el bloqueo automático para dejar lugar a la reserva real
-      }
-      return true;
-    });
-
-    const targetId = reservaData.id || ('res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4));
-    const finalRes: Reserva = {
-      ...reservaData,
-      id: targetId,
-      icalUid: undefined,
-    } as Reserva;
-
-    const updated = [...baseList, finalRes];
-    setReservas(updated);
-    setIsNewReservaOpen(false);
-    setEditingReserva(null);
-    showToast('Reserva guardada con éxito ✓');
-    await saveReservas(updated);
-  };
-
-  // Eliminar reserva de forma puntual y segura
   const handleDeleteReserva = async (id: string) => {
-    const updated = reservas.filter(r => r.id !== id);
-    setReservas(updated);
-    setSelectedReserva(null);
-    showToast('Reserva eliminada');
-    localStorage.setItem('bn_r', JSON.stringify(updated));
-    await deleteReservaFromDb(id);
+    try {
+      await eliminarReserva(id);
+      setReservas(prev => prev.filter(r => r.id !== id));
+      setSelectedReserva(null);
+      showToast('Reserva eliminada');
+    } catch (e) {
+      mostrarError('No se pudo eliminar', e);
+    }
   };
 
-  // Asignar cabaña física a una reserva sin asignar de Booking
   const handleAssignCabin = async (reservaId: string, newCabinCode: CabinCode) => {
-    const updated = reservas.map(r => (r.id === reservaId ? { ...r, depto: newCabinCode } : r));
-    setReservas(updated);
-    showToast(`Asignada a ${DN[newCabinCode]} ✓`);
-    await saveReservas(updated);
+    const r = reservas.find(x => x.id === reservaId);
+    if (!r) return;
+    try {
+      const guardada = await guardarReserva({ ...r, depto: newCabinCode });
+      setReservas(prev => prev.map(x => (x.id === reservaId ? guardada : x)));
+      showToast(`Asignada a ${DN[newCabinCode]} ✓`);
+    } catch (e) {
+      mostrarError('No se pudo asignar', e);
+    }
   };
 
-  // Convertir bloqueo de iCal en reserva editable
-  const handleConvertIcalBlock = (icalBlock: Reserva) => {
-    let cleanGuest = icalBlock.huesped || '';
-    if (cleanGuest.startsWith('🔒')) {
-      cleanGuest = cleanGuest.replace(/^🔒\s*/, '').trim();
-      if (cleanGuest.toLowerCase().includes('bloqueado') || cleanGuest.toLowerCase().includes('not available')) {
-        cleanGuest = '';
-      }
-    }
-
-    const convertedRes: Reserva = {
-      ...icalBlock,
-      id: 'res_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
-      huesped: cleanGuest,
-      precio: icalBlock.precio || 0,
-      notas: icalBlock.notas || `Convertido de bloqueo ${icalBlock.plataforma}`,
-      icalUid: undefined,
-    };
+  // Convertir un bloqueo iCal en reserva: se edita LA MISMA fila (mismo id y vínculo con el evento),
+  // así la próxima sincronización la reconoce y no crea un bloqueo nuevo.
+  const handleConvertIcalBlock = (bloqueo: Reserva) => {
+    let nombre = (bloqueo.huesped || '').replace(/^🔒\s*/, '').trim();
+    if (/bloqueado|not available|^reserved$/i.test(nombre)) nombre = '';
     setSelectedReserva(null);
-    setEditingReserva(convertedRes);
+    setEditingReserva({ ...bloqueo, huesped: nombre, icalUid: undefined, notas: bloqueo.notas || `Convertido de bloqueo ${bloqueo.plataforma}` });
   };
 
-  // Importar reservas desde Google Calendar (.ics o .csv)
-  const handleImportGoogleCalendar = async (newReservas: Reserva[], mode: 'replace' | 'append' = 'append') => {
-    let updated: Reserva[];
-    if (mode === 'replace') {
-      updated = newReservas;
-    } else {
-      const existingKeys = new Set(reservas.map(r => `${r.depto}_${r.checkin}`));
-      const nonDuplicates = newReservas.filter(r => !existingKeys.has(`${r.depto}_${r.checkin}`));
-      updated = [...reservas, ...nonDuplicates];
+  // Importar: nunca reemplaza; saltea lo que ya existe en CUALQUIER cabaña
+  const handleImportGoogleCalendar = async (nuevas: Reserva[]) => {
+    const yaExiste = (n: Reserva) =>
+      reservas.some(
+        r =>
+          (r.depto === n.depto && r.checkin === n.checkin) ||
+          (r.checkin === n.checkin && r.checkout === n.checkout && nombreClave(r.huesped) && nombreClave(r.huesped) === nombreClave(n.huesped))
+      );
+    const aImportar = nuevas.filter(n => !yaExiste(n));
+    const salteadas = nuevas.length - aImportar.length;
+    try {
+      await insertarReservas(aImportar);
+      await recargarReservas();
+      showToast(`Se importaron ${aImportar.length} reservas${salteadas ? ` · ${salteadas} ya existían y se saltearon` : ''} ✓`);
+    } catch (e) {
+      mostrarError('No se pudo importar', e);
     }
-    setReservas(updated);
-    await saveReservas(updated);
-    showToast(
-      mode === 'replace'
-        ? `Se reemplazaron todas las reservas con ${newReservas.length} reservas del archivo ✓`
-        : `Se importaron ${newReservas.length} reservas ✓`
-    );
   };
 
-  // Vaciar todas las reservas previas (acción destructiva deliberada)
-  const handleClearAllReservas = async () => {
-    setReservas([]);
-    localStorage.setItem('bn_r', JSON.stringify([]));
-    await clearAllReservasFromDb();
-    showToast('Todas las reservas han sido eliminadas ✓');
+  const handleAddGasto = async (g: Gasto) => {
+    try {
+      await guardarGasto(g);
+      setGastos(prev => [g, ...prev]);
+      showToast('Gasto registrado ✓');
+    } catch (e) {
+      mostrarError('No se guardó el gasto', e);
+    }
   };
 
-  // Agregar Gasto
-  const handleAddGasto = async (newGasto: Gasto) => {
-    const updated = [newGasto, ...gastos];
-    setGastos(updated);
-    showToast('Gasto registrado ✓');
-    await saveGastos(updated);
-  };
-
-  // Eliminar Gasto de forma puntual y segura
   const handleDeleteGasto = async (id: string) => {
-    const updated = gastos.filter(g => g.id !== id);
-    setGastos(updated);
-    showToast('Gasto eliminado');
-    localStorage.setItem('bn_g', JSON.stringify(updated));
-    await deleteGastoFromDb(id);
-  };
-
-  // Guardar o modificar tarea de voluntario
-  const handleSaveVolunteerTask = (task: VolunteerTask) => {
-    let updated: VolunteerTask[];
-    const idx = volunteerTasks.findIndex(t => t.id === task.id || (t.voluntarioId === task.voluntarioId && t.fecha === task.fecha));
-    if (idx >= 0) {
-      updated = [...volunteerTasks];
-      updated[idx] = task;
-    } else {
-      updated = [...volunteerTasks, task];
+    try {
+      await eliminarGasto(id);
+      setGastos(prev => prev.filter(g => g.id !== id));
+      showToast('Gasto eliminado');
+    } catch (e) {
+      mostrarError('No se pudo eliminar el gasto', e);
     }
-    setVolunteerTasks(updated);
-    saveVolunteerTasks(updated);
-    
-    // Si la tarea se guardó como completada y tiene cabaña vinculada, marcar cabaña limpia automáticamente
-    if (task.completada && task.depto && CABANAS.includes(task.depto as CabinCode)) {
-      const volName = volunteerNames[task.voluntarioId]?.split('(')[0]?.trim() || 'Voluntario';
-      const updatedStatuses = updateCabinCleaningStatus(task.depto as CabinCode, 'limpia', volName);
-      setCabinStatuses({ ...updatedStatuses });
+  };
+
+  const nombreVol = (id: VolunteerId) => volunteerNames[id]?.split('(')[0]?.trim() || 'Voluntario';
+
+  const actualizarEstadoCabana = async (depto: CabinCode, status: CabinCleaningStatus, updatedBy: string) => {
+    const info: CabinStatusInfo = { depto, status, updatedAt: new Date().toISOString(), updatedBy };
+    await guardarEstadoCabana(info);
+    setCabinStatuses(prev => ({ ...prev, [depto]: info }));
+  };
+
+  const handleSaveVolunteerTask = async (task: VolunteerTask) => {
+    try {
+      await guardarTarea(task);
+      setVolunteerTasks(prev => [...prev.filter(t => t.id !== task.id), task]);
+      if (task.completada && task.depto && CABANAS.includes(task.depto as CabinCode)) {
+        await actualizarEstadoCabana(task.depto as CabinCode, 'limpia', nombreVol(task.voluntarioId));
+      }
+      showToast(`Tarea guardada para ${nombreVol(task.voluntarioId)} ${task.completada ? '✓ Cabaña limpia 🟢' : ''}`);
+    } catch (e) {
+      mostrarError('No se guardó la tarea', e);
     }
-
-    const volName = volunteerNames[task.voluntarioId]?.split('(')[0]?.trim() || 'Voluntario';
-    showToast(`Tarea guardada para ${volName} ${task.completada ? '✓ Cabaña Limpia 🟢' : ''}`);
   };
 
-  // Eliminar tarea de voluntario
-  const handleDeleteVolunteerTask = (taskId: string) => {
-    const updated = volunteerTasks.filter(t => t.id !== taskId);
-    setVolunteerTasks(updated);
-    saveVolunteerTasks(updated);
-    showToast('Tarea de voluntario eliminada');
-  };
-
-  // Alternar completada en tarea de voluntario
-  const handleToggleVolunteerTaskComplete = (taskId: string, completed: boolean) => {
-    const updated = volunteerTasks.map(t => t.id === taskId ? { ...t, completada: completed } : t);
-    setVolunteerTasks(updated);
-    saveVolunteerTasks(updated);
-
-    const targetTask = volunteerTasks.find(t => t.id === taskId);
-    if (targetTask && targetTask.depto && CABANAS.includes(targetTask.depto as CabinCode)) {
-      const nextCabinStatus = completed ? 'limpia' : 'pendiente';
-      const volName = volunteerNames[targetTask.voluntarioId]?.split('(')[0]?.trim() || 'Voluntario';
-      const updatedStatuses = updateCabinCleaningStatus(targetTask.depto as CabinCode, nextCabinStatus, volName);
-      setCabinStatuses({ ...updatedStatuses });
+  const handleDeleteVolunteerTask = async (taskId: string) => {
+    try {
+      await eliminarTarea(taskId);
+      setVolunteerTasks(prev => prev.filter(t => t.id !== taskId));
+      showToast('Tarea eliminada');
+    } catch (e) {
+      mostrarError('No se pudo eliminar la tarea', e);
     }
-
-    showToast(completed ? '¡Tarea realizada ✓ y Cabaña marcada como Limpia 🟢!' : 'Tarea marcada como pendiente');
   };
 
-  // Actualizar estado de limpieza de una cabaña (Semáforo)
-  const handleUpdateCabinStatus = (depto: CabinCode, status: CabinCleaningStatus, updatedBy?: string) => {
-    const updated = updateCabinCleaningStatus(depto, status, updatedBy || (currentUser === 'vol1' || currentUser === 'vol2' ? volunteerNames[currentUser] : 'Recepción'));
-    setCabinStatuses({ ...updated });
-    showToast(`${DN[depto] || depto}: marcada como ${status === 'limpia' ? 'Limpia 🟢' : status === 'pendiente' ? 'Pendiente Limpieza 🔴' : 'Ocupada 🟡'}`);
+  const handleToggleVolunteerTaskComplete = async (taskId: string, completed: boolean) => {
+    const tarea = volunteerTasks.find(t => t.id === taskId);
+    try {
+      await marcarTarea(taskId, completed);
+      setVolunteerTasks(prev => prev.map(t => (t.id === taskId ? { ...t, completada: completed } : t)));
+      if (tarea?.depto && CABANAS.includes(tarea.depto as CabinCode)) {
+        await actualizarEstadoCabana(tarea.depto as CabinCode, completed ? 'limpia' : 'pendiente', nombreVol(tarea.voluntarioId));
+      }
+      showToast(completed ? 'Tarea hecha ✓ · Cabaña marcada como limpia 🟢' : 'Tarea marcada como pendiente');
+    } catch (e) {
+      mostrarError('No se pudo actualizar la tarea', e);
+    }
   };
 
-  // Descarga de Backup
+  const handleUpdateCabinStatus = async (depto: CabinCode, status: CabinCleaningStatus, updatedBy?: string) => {
+    const quien =
+      updatedBy || (rolPantalla === 'vol1' || rolPantalla === 'vol2' ? nombreVol(rolPantalla) : rolPantalla === 'admin' ? 'Propietario' : 'Recepción');
+    try {
+      await actualizarEstadoCabana(depto, status, quien);
+      showToast(`${DN[depto] || depto}: ${status === 'limpia' ? 'Limpia 🟢' : status === 'pendiente' ? 'Pendiente de limpieza 🔴' : 'Ocupada 🟡'}`);
+    } catch (e) {
+      mostrarError('No se pudo actualizar la cabaña', e);
+    }
+  };
+
   const handleDownloadBackup = () => {
-    const backupObj = {
-      fecha: new Date().toISOString(),
-      reservas,
-      gastos,
-      volunteerTasks,
-      volunteerNames,
-      cabinStatuses,
-      pins: localStorage.getItem('bn_p'),
-      wa: localStorage.getItem('bn_wa'),
-      ical: localStorage.getItem('bn_ical'),
-    };
-    const json = JSON.stringify(backupObj, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
+    const backupObj = { fecha: new Date().toISOString(), reservas, gastos, volunteerTasks, volunteerNames, cabinStatuses };
+    const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `backup_bananos_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+    URL.revokeObjectURL(url);
     showToast('Copia de respaldo descargada');
   };
 
-  // Restaurar Backup
+  // Restaurar: SOLO agrega lo que falta. Nunca pisa ni borra datos actuales.
   const handleRestoreBackup = (file: File) => {
     const reader = new FileReader();
     reader.onload = async e => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        if (data.reservas && Array.isArray(data.reservas)) {
-          setReservas(data.reservas);
-          await saveReservas(data.reservas);
-          if (data.gastos) {
-            setGastos(data.gastos);
-            await saveGastos(data.gastos);
-          }
-          if (data.volunteerTasks && Array.isArray(data.volunteerTasks)) {
-            setVolunteerTasks(data.volunteerTasks);
-            saveVolunteerTasks(data.volunteerTasks);
-          }
-          if (data.volunteerNames) {
-            setVolunteerNames(data.volunteerNames);
-          }
-          if (data.cabinStatuses) {
-            setCabinStatuses(data.cabinStatuses);
-            saveCabinCleaningStatuses(data.cabinStatuses);
-          }
-          showToast('Copia de respaldo restaurada con éxito ✓');
-        } else {
+        if (!Array.isArray(data.reservas)) {
           showToast('Archivo de respaldo no válido', false);
+          return;
         }
+        const existentes = new Set(reservas.map(r => r.id));
+        const faltantes = (data.reservas as Reserva[]).filter(r => r && r.id && !existentes.has(r.id));
+        if (!window.confirm(`El respaldo tiene ${data.reservas.length} reservas. Se van a AGREGAR ${faltantes.length} que hoy no están. No se modifica ni borra nada de lo actual. ¿Seguimos?`)) return;
+        await insertarReservas(faltantes);
+        if (esAdmin && Array.isArray(data.gastos)) {
+          const gIds = new Set(gastos.map(g => g.id));
+          for (const g of data.gastos as Gasto[]) if (g?.id && !gIds.has(g.id)) await guardarGasto(g);
+        }
+        await cargarTodo();
+        showToast(`Respaldo restaurado: ${faltantes.length} reservas agregadas ✓`);
       } catch (err) {
-        showToast('Error al leer el archivo de respaldo', false);
+        mostrarError('Error al restaurar', err);
       }
     };
     reader.readAsText(file);
   };
 
-  // 1. Si se solicita la Página de Bienvenida y Guía del Huésped (?guia, ?bienvenida, etc.)
+  // ---------------------------------------------------------------- Pantallas públicas
+  const loginModal = <UnlockAdminModal isOpen={isUnlockAdminOpen} onClose={() => setIsUnlockAdminOpen(false)} />;
+
+  // Al iniciar sesión desde el modal, cerrarlo
+  useEffect(() => {
+    if (rol) setIsUnlockAdminOpen(false);
+  }, [rol, session?.user?.id]);
+
   if (isGuestWelcomeOpen) {
     return (
       <>
@@ -553,230 +475,43 @@ export default function App() {
             setIsGuestWelcomeOpen(false);
             setOpenedFromAdmin(false);
             window.history.replaceState({}, '', window.location.pathname);
-            if (!currentUser) {
-              setIsUnlockAdminOpen(true);
-            }
           }}
           openedFromAdmin={openedFromAdmin}
         />
-        <UnlockAdminModal
-          isOpen={isUnlockAdminOpen}
-          onClose={() => setIsUnlockAdminOpen(false)}
-          onSuccess={handleUnlockAdminSuccess}
-        />
+        {loginModal}
       </>
     );
   }
 
-  // 2. Si se solicita la Landing Page pública de Catálogo / Reservas
   if (isLandingMode) {
     return (
       <>
         <LandingPageView
-          reservas={reservas}
           onBackToAdmin={() => {
             setIsLandingMode(false);
             window.history.replaceState({}, '', window.location.pathname);
-            if (!currentUser) {
-              setIsUnlockAdminOpen(true);
-            }
-          }}
-          onNewReservaCreated={res => {
-            handleSaveReserva(res);
-            showToast(`¡Nueva reserva creada desde la Landing: ${res.huesped}! 🎉`);
           }}
         />
-        <UnlockAdminModal
-          isOpen={isUnlockAdminOpen}
-          onClose={() => setIsUnlockAdminOpen(false)}
-          onSuccess={handleUnlockAdminSuccess}
-        />
+        {loginModal}
       </>
     );
   }
 
-  // 3. Si no ha ingresado el PIN del sistema de gestión interno
-  if (!currentUser) {
+  if (!sesionLista) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Cargando…</div>;
+  }
+
+  if (!session || !rol) {
     return (
       <PinLogin
-        onLoginSuccess={user => setCurrentUser(user)}
         onOpenGuestGuide={() => setIsGuestWelcomeOpen(true)}
+        aviso={errorRol || (session && !rol ? 'Tu usuario no tiene acceso a Los Bananos. Pedile a Gabi que te habilite.' : null)}
       />
     );
   }
 
-  // Si el usuario ingresó como Voluntario (Worldpackers 1 o 2)
-  if (currentUser === 'vol1' || currentUser === 'vol2') {
-    return (
-      <>
-        <VoluntarioPortalView
-          volunteerId={currentUser}
-          tasks={volunteerTasks}
-          onToggleTaskComplete={handleToggleVolunteerTaskComplete}
-          reservas={reservas}
-          onLogout={() => {
-            localStorage.removeItem('bn_remembered_user');
-            setCurrentUser(null);
-          }}
-          isDarkMode={isDarkMode}
-          onToggleTheme={handleToggleTheme}
-          cabinStatuses={effectiveCabinStatuses}
-          onUpdateCabinStatus={handleUpdateCabinStatus}
-          onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
-        />
-
-        {/* Modal para ingresar con PIN maestro 1535 aun estando en portal de voluntario */}
-        <UnlockAdminModal
-          isOpen={isUnlockAdminOpen}
-          onClose={() => setIsUnlockAdminOpen(false)}
-          onSuccess={handleUnlockAdminSuccess}
-        />
-      </>
-    );
-  }
-
-  return (
-    <div className={`min-h-screen ${isDarkMode ? 'theme-dark bg-[#12151A] text-[#F1F5F9]' : 'theme-light bg-[#F3F5F7] text-[#0F172A]'} flex flex-col ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
-      {/* Barra de Navegación Principal */}
-      <Header
-        currentUser={currentUser}
-        onLogout={() => {
-          localStorage.removeItem('bn_remembered_user');
-          setCurrentUser(null);
-        }}
-        viewMode={viewMode}
-        onToggleViewMode={handleToggleViewMode}
-        currentTab={currentTab}
-        onSelectTab={tab => setCurrentTab(tab)}
-        onOpenNewReserva={() => {
-          setEditingReserva(null);
-          setIsNewReservaOpen(true);
-        }}
-        isDyslexiaMode={isDyslexiaMode}
-        onToggleDyslexiaMode={handleToggleDyslexia}
-        onSyncIcal={handleSyncIcalManual}
-        isSyncing={isSyncingIcal}
-        isDarkMode={isDarkMode}
-        onToggleTheme={handleToggleTheme}
-        onOpenGoogleCalendar={() => setIsGoogleCalendarOpen(true)}
-        onRequestSwitchToAdmin={() => setIsUnlockAdminOpen(true)}
-        onSwitchToReception={handleSwitchToReception}
-        onOpenLandingPage={() => setIsLandingMode(true)}
-        onOpenGuestWelcome={() => {
-          setOpenedFromAdmin(true);
-          setIsGuestWelcomeOpen(true);
-        }}
-        onSwitchToVolunteer={volId => {
-          setCurrentUser(volId);
-          localStorage.setItem('bn_remembered_user', volId);
-          showToast(`Ingresando a la vista de ${volId === 'vol1' ? 'Voluntario 1' : 'Voluntario 2'} 🧑‍🌾`);
-        }}
-      />
-
-      {/* Contenedor Principal */}
-      <main className={`flex-1 w-full mx-auto p-3 sm:p-6 space-y-6 ${(isReception || currentTab === 'calendario') ? 'max-w-full' : 'max-w-7xl'}`}>
-        {isLoading ? (
-          <div className="p-12 text-center space-y-3">
-            <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <div className="text-slate-400 font-medium text-sm">
-              Sincronizando cabañas y reservas...
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Si está en modo recepción, SIEMPRE muestra solo el calendario sin desvíos */}
-            {(isReception || currentTab === 'calendario') && (
-              <CalendarTimeline
-                reservas={reservas}
-                onSelectReserva={res => setSelectedReserva(res)}
-                onOpenAssignCabin={res => setAssigningReserva(res)}
-                onConvertIcalBlock={res => handleConvertIcalBlock(res)}
-                onOpenRendimiento={() => setCurrentTab('rendimiento')}
-                volunteerTasks={volunteerTasks}
-                onSelectVolunteerSlot={(volId, dateIso, task) => {
-                  setVolunteerModalSlot({ volId, dateIso, task: task || null });
-                }}
-                volunteerNames={volunteerNames}
-                isDyslexiaMode={isDyslexiaMode}
-                isDarkMode={isDarkMode}
-                isReception={isReception}
-                cabinStatuses={effectiveCabinStatuses}
-                onUpdateCabinStatus={handleUpdateCabinStatus}
-              />
-            )}
-
-            {/* Módulos exclusivos del Modo Propietario */}
-            {!isReception && (
-              <>
-                {/* Vista 2: Rendimiento y Balance del Negocio */}
-                {currentTab === 'rendimiento' && (
-                  <RendimientoView
-                    reservas={reservas}
-                    gastos={gastos}
-                    onBackToCalendar={() => setCurrentTab('calendario')}
-                  />
-                )}
-
-                {/* Vista 3: Tabla Histórica de Reservas */}
-                {currentTab === 'reservas' && (
-                  <ReservasTableView
-                    reservas={reservas}
-                    onEditReserva={res => {
-                      setEditingReserva(res);
-                      setIsNewReservaOpen(true);
-                    }}
-                    onDeleteReserva={handleDeleteReserva}
-                    onAssignCabin={res => setAssigningReserva(res)}
-                    onImportCsv={() => setIsGoogleCalendarOpen(true)}
-                    onClearAllReservas={() => setIsConfirmClearOpen(true)}
-                  />
-                )}
-
-                {/* Vista 4: Gastos Operativos */}
-                {currentTab === 'gastos' && (
-                  <GastosView
-                    gastos={gastos}
-                    onAddGasto={handleAddGasto}
-                    onDeleteGasto={handleDeleteGasto}
-                  />
-                )}
-
-                {/* Vista 5: Avisos de Check-in */}
-                {currentTab === 'avisos' && (
-                  <AvisosView reservas={reservas} />
-                )}
-
-                {/* Vista 6: Configuración e iCal */}
-                {currentTab === 'config' && (
-                  <ConfigView
-                    reservas={reservas}
-                    onSyncAllIcal={handleSyncIcalManual}
-                    isSyncing={isSyncingIcal}
-                    onDownloadBackup={handleDownloadBackup}
-                    onRestoreBackup={handleRestoreBackup}
-                    onClearAllReservas={() => setIsConfirmClearOpen(true)}
-                  />
-                )}
-
-                {/* Vista 7: Xenia Multicanal (WhatsApp, Instagram y Web) */}
-                {currentTab === 'xenia' && (
-                  <XeniaMulticanalView
-                    reservas={reservas}
-                    onNewReservaCreated={res => {
-                      handleSaveReserva(res);
-                      showToast(`¡Reserva creada por Xenia: ${res.huesped} en ${res.plataforma}! 🎉`);
-                    }}
-                    onOpenLandingPage={() => setIsLandingMode(true)}
-                    onNavigateTab={setCurrentTab}
-                  />
-                )}
-              </>
-            )}
-          </>
-        )}
-      </main>
-
-      {/* Modal: Ficha Detallada de Reserva (al tocar en el calendario) */}
+  const fichaYModales = (
+    <>
       <FichaReservaModal
         reserva={selectedReserva}
         onClose={() => setSelectedReserva(null)}
@@ -789,12 +524,150 @@ export default function App() {
           setSelectedReserva(null);
           setAssigningReserva(res);
         }}
-        onConvertIcal={res => handleConvertIcalBlock(res)}
-        onDelete={id => handleDeleteReserva(id)}
+        onConvertIcal={handleConvertIcalBlock}
+        onDelete={handleDeleteReserva}
         isDyslexiaMode={isDyslexiaMode}
+        cabinStatuses={effectiveCabinStatuses}
+        puedeEditar={puedeEditar}
+      />
+      {loginModal}
+    </>
+  );
+
+  // Portal de voluntarios (o el propietario previsualizándolo)
+  if (rolPantalla === 'vol1' || rolPantalla === 'vol2') {
+    return (
+      <>
+        <VoluntarioPortalView
+          volunteerId={rolPantalla}
+          tasks={volunteerTasks}
+          onToggleTaskComplete={handleToggleVolunteerTaskComplete}
+          reservas={reservas}
+          onLogout={esAdmin ? () => setVista('propia') : handleLogout}
+          isDarkMode={isDarkMode}
+          onToggleTheme={handleToggleTheme}
+          cabinStatuses={effectiveCabinStatuses}
+          onUpdateCabinStatus={handleUpdateCabinStatus}
+          onRequestSwitchToAdmin={esAdmin ? () => setVista('propia') : () => setIsUnlockAdminOpen(true)}
+        />
+        {fichaYModales}
+        {toast && <Toast toast={toast} />}
+      </>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen ${isDarkMode ? 'theme-dark bg-[#12151A] text-[#F1F5F9]' : 'theme-light bg-[#F3F5F7] text-[#0F172A]'} flex flex-col ${isDyslexiaMode ? 'dyslexia-enhanced' : ''}`}>
+      <Header
+        isReception={isReception}
+        esAdmin={esAdmin}
+        onLogout={handleLogout}
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        onOpenNewReserva={() => {
+          setEditingReserva(null);
+          setIsNewReservaOpen(true);
+        }}
+        isDyslexiaMode={isDyslexiaMode}
+        onToggleDyslexiaMode={handleToggleDyslexia}
+        onSyncIcal={() => correrSync(true)}
+        isSyncing={isSyncingIcal}
+        isDarkMode={isDarkMode}
+        onToggleTheme={handleToggleTheme}
+        onOpenGoogleCalendar={() => setIsGoogleCalendarOpen(true)}
+        onCambiarUsuario={() => setIsUnlockAdminOpen(true)}
+        onVolverAPropietario={() => setVista('propia')}
+        onSwitchToReception={esAdmin ? () => { setVista('recepcion'); setCurrentTab('calendario'); } : undefined}
+        onSwitchToVolunteer={esAdmin ? volId => setVista(volId) : undefined}
+        onOpenGuestWelcome={() => {
+          setOpenedFromAdmin(true);
+          setIsGuestWelcomeOpen(true);
+        }}
       />
 
-      {/* Modal: Formulario Nueva / Editar Reserva */}
+      {sinConexion && (
+        <div className="bg-amber-100 text-amber-900 border-b border-amber-300 px-4 py-2 text-sm font-semibold flex items-center gap-2">
+          <WifiOff className="w-4 h-4" /> Sin conexión: estás viendo la última copia guardada. Los cambios no se van a guardar hasta que vuelva la conexión.
+        </div>
+      )}
+
+      <main className={`flex-1 w-full mx-auto p-2 sm:p-6 space-y-6 ${isReception || currentTab === 'calendario' ? 'max-w-full' : 'max-w-7xl'}`}>
+        {isLoading ? (
+          <div className="p-12 text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <div className="text-slate-400 font-medium text-sm">Cargando reservas…</div>
+          </div>
+        ) : (
+          <>
+            {(isReception || currentTab === 'calendario') && (
+              <CalendarTimeline
+                reservas={reservas}
+                onSelectReserva={setSelectedReserva}
+                onOpenAssignCabin={puedeEditar ? setAssigningReserva : undefined}
+                onConvertIcalBlock={puedeEditar ? handleConvertIcalBlock : undefined}
+                onOpenRendimiento={esAdmin && !isReception ? () => setCurrentTab('rendimiento') : undefined}
+                volunteerTasks={volunteerTasks}
+                onSelectVolunteerSlot={
+                  puedeEditar ? (volId, dateIso, task) => setVolunteerModalSlot({ volId, dateIso, task: task || null }) : undefined
+                }
+                volunteerNames={volunteerNames}
+                isDyslexiaMode={isDyslexiaMode}
+                isDarkMode={isDarkMode}
+                isReception={isReception}
+                cabinStatuses={effectiveCabinStatuses}
+                onUpdateCabinStatus={handleUpdateCabinStatus}
+              />
+            )}
+
+            {!isReception && esAdmin && (
+              <>
+                {currentTab === 'rendimiento' && (
+                  <RendimientoView reservas={reservas} gastos={gastos} onBackToCalendar={() => setCurrentTab('calendario')} />
+                )}
+                {currentTab === 'reservas' && (
+                  <ReservasTableView
+                    reservas={reservas}
+                    onEditReserva={res => {
+                      setEditingReserva(res);
+                      setIsNewReservaOpen(true);
+                    }}
+                    onDeleteReserva={handleDeleteReserva}
+                    onAssignCabin={res => setAssigningReserva(res)}
+                    onImportCsv={() => setIsGoogleCalendarOpen(true)}
+                  />
+                )}
+                {currentTab === 'gastos' && <GastosView gastos={gastos} onAddGasto={handleAddGasto} onDeleteGasto={handleDeleteGasto} />}
+                {currentTab === 'avisos' && <AvisosView reservas={reservas} />}
+                {currentTab === 'config' && (
+                  <ConfigView
+                    reservas={reservas}
+                    onSyncAllIcal={() => correrSync(true)}
+                    isSyncing={isSyncingIcal}
+                    onDownloadBackup={handleDownloadBackup}
+                    onRestoreBackup={handleRestoreBackup}
+                    onConfigGuardada={() => showToast('Configuración guardada para todos los dispositivos ✓')}
+                    onError={e => mostrarError('No se guardó la configuración', e)}
+                  />
+                )}
+                {currentTab === 'xenia' && (
+                  <XeniaMulticanalView
+                    reservas={reservas}
+                    onNewReservaCreated={() => {
+                      recargarReservas();
+                      showToast('Xenia registró una reserva pendiente de seña 🎉');
+                    }}
+                    onOpenLandingPage={() => setIsLandingMode(true)}
+                    onNavigateTab={setCurrentTab}
+                  />
+                )}
+              </>
+            )}
+          </>
+        )}
+      </main>
+
+      {fichaYModales}
+
       <ReservaFormModal
         isOpen={isNewReservaOpen || editingReserva !== null}
         onClose={() => {
@@ -807,15 +680,8 @@ export default function App() {
         isDyslexiaMode={isDyslexiaMode}
       />
 
-      {/* Modal: Asignar Cabaña Física a Booking */}
-      <AssignCabinModal
-        reserva={assigningReserva}
-        onClose={() => setAssigningReserva(null)}
-        onAssign={handleAssignCabin}
-        existingReservas={reservas}
-      />
+      <AssignCabinModal reserva={assigningReserva} onClose={() => setAssigningReserva(null)} onAssign={handleAssignCabin} existingReservas={reservas} />
 
-      {/* Modal: Cargar Google Calendar / .ics / CSV */}
       <GoogleCalendarImportModal
         isOpen={isGoogleCalendarOpen}
         onClose={() => setIsGoogleCalendarOpen(false)}
@@ -824,26 +690,9 @@ export default function App() {
         onDownloadBackup={handleDownloadBackup}
       />
 
-      {/* Modal: Confirmación para vaciar todas las reservas */}
-      <ConfirmClearReservasModal
-        isOpen={isConfirmClearOpen}
-        onClose={() => setIsConfirmClearOpen(false)}
-        onConfirm={handleClearAllReservas}
-        count={reservas.length}
-        onDownloadBackup={handleDownloadBackup}
-      />
-
-      {/* Modal: Desbloquear Modo Propietario */}
-      <UnlockAdminModal
-        isOpen={isUnlockAdminOpen}
-        onClose={() => setIsUnlockAdminOpen(false)}
-        onSuccess={handleUnlockAdminSuccess}
-      />
-
-      {/* Modal: Tarea de Voluntario Worldpackers */}
       {volunteerModalSlot && (
         <VolunteerTaskModal
-          isOpen={volunteerModalSlot !== null}
+          isOpen
           onClose={() => setVolunteerModalSlot(null)}
           onSaveTask={handleSaveVolunteerTask}
           onDeleteTask={handleDeleteVolunteerTask}
@@ -855,20 +704,24 @@ export default function App() {
         />
       )}
 
-      {/* Asistente Flotante Xenia */}
-      <XeniaChat reservas={reservas} gastos={gastos} theme={theme} />
+      {/* Xenia interna: solo el propietario (responde sobre finanzas) */}
+      {esAdmin && !isReception && <XeniaChat reservas={reservas} gastos={gastos} theme={theme} />}
 
-      {/* Notificaciones Toast Charcoal */}
-      {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-[#1A1F26] text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm border border-[#2D3540] border-l-4 border-l-emerald-500 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          {toast.ok ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-          )}
-          <span>{toast.msg}</span>
-        </div>
-      )}
+      {toast && <Toast toast={toast} />}
+    </div>
+  );
+}
+
+function Toast({ toast }: { toast: { msg: string; ok: boolean } }) {
+  return (
+    <div
+      role="status"
+      className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] max-w-[92vw] bg-[#1A1F26] text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-sm border border-[#2D3540] border-l-4 ${
+        toast.ok ? 'border-l-emerald-500' : 'border-l-rose-500'
+      }`}
+    >
+      {toast.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+      <span>{toast.msg}</span>
     </div>
   );
 }

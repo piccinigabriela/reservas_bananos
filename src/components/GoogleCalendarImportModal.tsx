@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Reserva, CabinCode, Plataforma, EstadoReserva } from '../types';
 import { CABANAS, DN, DC } from '../services/cabinConfig';
 import { parseImportFile, parseFreeText, ParsedImportItem } from '../services/calendarImportParser';
-import { fetchIcalFromUrl, DEFAULT_GCAL_FEED_URL } from '../services/api';
+import { fetchIcalFromUrl } from '../services/api';
+import { cfg } from '../services/settings';
 import {
   Upload,
   Calendar,
@@ -41,23 +42,14 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
   const [step, setStep] = useState<'upload' | 'preview'>('upload');
   const [inputTab, setInputTab] = useState<'url' | 'text' | 'file'>('url');
   const [pastedText, setPastedText] = useState<string>('');
-  const [gcalUrl, setGcalUrl] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('bn_ical');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.gc_general || DEFAULT_GCAL_FEED_URL;
-      }
-    } catch (_) {}
-    return DEFAULT_GCAL_FEED_URL;
-  });
+  const [gcalUrl, setGcalUrl] = useState<string>(() => cfg<Record<string, string>>('ical_urls', {}).gc_general || '');
   const [isFetchingUrl, setIsFetchingUrl] = useState<boolean>(false);
   const [copiedCabinLink, setCopiedCabinLink] = useState<string | null>(null);
   const [showHowToGuide, setShowHowToGuide] = useState<boolean>(true);
   const [parsedItems, setParsedItems] = useState<ParsedImportItem[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
-  const [importMode, setImportMode] = useState<'replace' | 'append'>('append');
+  const [importMode, setImportMode] = useState<'replace' | 'append'>('append'); // 'replace' ya no se ofrece
 
   if (!isOpen) return null;
 
@@ -81,14 +73,6 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
         setErrorMsg('El calendario se conectó correctamente pero no contiene eventos de reserva en el rango de fechas actual o futuro.');
         return;
       }
-
-      // Guardar URL para que quede persistida en la configuración iCal
-      try {
-        const savedRaw = localStorage.getItem('bn_ical');
-        const urls = savedRaw ? JSON.parse(savedRaw) : {};
-        urls.gc_general = cleanUrl;
-        localStorage.setItem('bn_ical', JSON.stringify(urls));
-      } catch (_) {}
 
       setFileName('Google Calendar (Sincronización en vivo)');
       setParsedItems(items);
@@ -626,36 +610,6 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setImportMode('replace')}
-                    className={`p-3 rounded-xl border text-left transition flex items-start gap-3 ${
-                      importMode === 'replace'
-                        ? 'bg-[#1E293B] border-[#3B82F6] ring-1 ring-[#3B82F6]'
-                        : 'bg-[#1A1F26] border-[#2D3540] hover:border-[#374151]'
-                    }`}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
-                        importMode === 'replace'
-                          ? 'border-[#3B82F6] bg-[#3B82F6]'
-                          : 'border-[#64748B]'
-                      }`}
-                    >
-                      {importMode === 'replace' && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                    </div>
-                    <div>
-                      <span className="font-bold text-sm text-white block flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 text-[#60A5FA]" />
-                        Reemplazar todas las reservas previas
-                      </span>
-                      <span className="text-[11px] text-[#94A3B8] block mt-0.5">
-                        Vacía las reservas existentes en la app y carga las de tu archivo limpio. 
-                        <strong> Evita superposiciones y duplicados</strong> si tu archivo ya contiene las reservas viejas y nuevas.
-                      </span>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => setImportMode('append')}
                     className={`p-3 rounded-xl border text-left transition flex items-start gap-3 ${
                       importMode === 'append'
@@ -678,7 +632,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
                         Sumar a las reservas existentes
                       </span>
                       <span className="text-[11px] text-[#94A3B8] block mt-0.5">
-                        Conserva las reservas que ya están en la app y añade las del archivo, omitiendo las que coincidan en cabaña y check-in.
+                        Se suman a las que ya están. Se saltean las que ya existen (misma cabaña y entrada, o mismo huésped y mismas fechas en cualquier cabaña). Para no duplicar, la opción "reemplazar todo" se quitó.
                       </span>
                     </div>
                   </button>
