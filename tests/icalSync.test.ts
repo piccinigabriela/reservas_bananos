@@ -151,6 +151,19 @@ prueba('parsearIcal: líneas plegadas, fechas con hora, cancelados y bloqueos de
   assert.equal(ev2.find(e => e.uid === 'tres@google.com')?.summary, 'C5 Muy largo nombre quesigue en otra línea');
 });
 
+prueba('Con solo Airbnb cargado, NO se borran los bloqueos viejos de Google (pueden ser reservas reales)', () => {
+  const reservas = [
+    base({ id: 'ical-C7-5e38lka9gh3vmmoptc58', depto: 'C7', huesped: '🔒 Raquel 3 Pm', checkin: '2026-10-10', checkout: '2026-10-13', plataforma: 'Google', notas: 'Sincronización Google Calendar · C7 x2 Raquel' }),
+    base({ id: 'ical-C9-7mq7ah0b6dpt9kg3mvld', depto: 'C9', huesped: '🔒 Mayra', checkin: '2026-10-03', checkout: '2026-10-19', plataforma: 'Google', notas: 'Sincronización Google Calendar · C9 Mayra' }),
+    base({ id: 'ical-C5-1418fb94e984-old', depto: 'C5', huesped: '🔒 Reserved', checkin: '2026-11-01', checkout: '2026-11-03', plataforma: 'Airbnb', notas: 'Bloqueo iCal · airbnb' }),
+    base({ id: 'ical-C8-1418fb94e984-otro', depto: 'C8', huesped: '🔒 Reserved', checkin: '2026-11-01', checkout: '2026-11-03', plataforma: 'Airbnb', notas: 'Bloqueo iCal · airbnb' }),
+    base({ id: 'ical-C6-raro', depto: 'C6', huesped: '🔒 ?', checkin: '2026-11-01', checkout: '2026-11-03', notas: '' }),
+  ];
+  const plan = planificarSync(reservas, [{ feed: fAirbnbC5, eventos: [] }], HOY);
+  // Solo el bloqueo viejo de Airbnb de C5 (su calendario se leyó y ya no lo tiene)
+  assert.deepEqual(plan.borrar, ['ical-C5-1418fb94e984-old']);
+});
+
 console.log(`\n${ok} pruebas OK`);
 
 import { cabanaDelTitulo } from '../src/services/icalSync';
