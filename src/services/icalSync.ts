@@ -190,15 +190,20 @@ export function planificarSync(reservas: Reserva[], resultados: ResultadoFeed[],
 
   const vivas = () => Array.from(porId.values()).filter(r => !borrar.has(r.id));
 
-  /** ¿Ya hay una reserva cargada por una persona que representa este evento? */
+  /**
+   * ¿Ya hay una reserva cargada por una persona que representa este evento, EN ESA CABAÑA?
+   * Si el mismo huésped está cargado en OTRA cabaña, no cuenta: se crea el bloqueo igual y
+   * el calendario lo marca como "mismo huésped en otra cabaña" para que alguien decida.
+   * (Antes eso hacía desaparecer el bloqueo y la cabaña de Google quedaba como libre.)
+   */
   const cubiertoPorReal = (cabana: CabinCode, ev: EventoIcal, nombre: string) =>
     vivas().some(
       r =>
         !esBloqueo(r) &&
         estaActiva(r) &&
-        ((r.depto === cabana && r.checkin === ev.ci && r.checkout === ev.co) ||
-          (r.checkin === ev.ci && r.checkout === ev.co && nombre && nombreClave(r.huesped) === nombre) ||
-          (r.depto === cabana && seSuperponen(r, { checkin: ev.ci, checkout: ev.co }) && nombre && nombreClave(r.huesped) === nombre))
+        r.depto === cabana &&
+        ((r.checkin === ev.ci && r.checkout === ev.co) ||
+          (seSuperponen(r, { checkin: ev.ci, checkout: ev.co }) && nombre && nombreClave(r.huesped) === nombre))
     );
 
   /** ¿Ya hay otro bloqueo con exactamente esas fechas en esa cabaña (de otro feed)? */
