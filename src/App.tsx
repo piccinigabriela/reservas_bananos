@@ -529,6 +529,7 @@ export default function App() {
         isDyslexiaMode={isDyslexiaMode}
         cabinStatuses={effectiveCabinStatuses}
         puedeEditar={puedeEditar}
+        puedeQuitarBloqueo={esAdmin && !isReception}
       />
       {loginModal}
     </>

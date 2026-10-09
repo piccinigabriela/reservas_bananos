@@ -31,6 +31,19 @@ export function nombreClave(nombre: string): string {
     .split(/\s+/)[0] || '';
 }
 
+/** Bloqueo sin nombre ("Reserved" de Airbnb, "Not available"...). */
+export function esBloqueoAnonimo(r: Reserva): boolean {
+  return esBloqueo(r) && !nombreClave(r.huesped);
+}
+
+/**
+ * Airbnb manda "Reserved" y Fer anota la misma reserva con nombre en su Google:
+ * misma cabaña y mismas fechas exactas → es una sola reserva, no un conflicto.
+ */
+function esLaMismaConOtroNombre(a: Reserva, b: Reserva): boolean {
+  return a.checkin === b.checkin && a.checkout === b.checkout && (esBloqueoAnonimo(a) || esBloqueoAnonimo(b));
+}
+
 export interface Conflicto {
   tipo: 'misma_cabana' | 'mismo_huesped_otra_cabana';
   a: Reserva;
@@ -46,6 +59,7 @@ export function detectarConflictos(reservas: Reserva[], desdeIso: string): Confl
       const a = activas[i];
       const b = activas[j];
       if (a.depto === b.depto && seSuperponen(a, b)) {
+        if (esLaMismaConOtroNombre(a, b)) continue;
         out.push({ tipo: 'misma_cabana', a, b });
       } else if (
         a.depto !== b.depto &&

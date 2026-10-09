@@ -51,6 +51,8 @@ interface FichaReservaModalProps {
   cabinStatuses?: Partial<Record<CabinCode, CabinStatusInfo>>;
   /** Recepción/propietario pueden editar; voluntarios solo ven. */
   puedeEditar?: boolean;
+  /** Solo el propietario puede quitar un bloqueo automático. */
+  puedeQuitarBloqueo?: boolean;
 }
 
 // Antes este componente llamaba hooks DESPUÉS de "if (!reserva) return null", lo que
@@ -68,6 +70,7 @@ const FichaReservaContenido: React.FC<FichaReservaModalProps & { reserva: Reserv
   isDyslexiaMode,
   cabinStatuses = {},
   puedeEditar = true,
+  puedeQuitarBloqueo = false,
 }) => {
 
   const isIcal = !!reserva.icalUid;
@@ -239,6 +242,18 @@ const FichaReservaContenido: React.FC<FichaReservaModalProps & { reserva: Reserv
                 className="w-full py-3 px-4 bg-[#D2502A] hover:bg-[#B53F1D] text-white font-bold text-sm sm:text-base rounded-xl transition shadow-md flex items-center justify-center gap-2"
               >
                 <span>➕ Convertir en Reserva Confirmada</span>
+              </button>}
+
+              {puedeQuitarBloqueo && onDelete && <button
+                onClick={() => {
+                  if (window.confirm('¿Quitar este bloqueo?\n\nSi todavía figura en el calendario de origen (Airbnb, Booking o Google), va a volver a aparecer en la próxima sincronización.')) {
+                    onDelete(reserva.id);
+                    onClose();
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-white hover:bg-rose-50 border-2 border-rose-300 text-rose-700 font-bold text-sm rounded-xl transition"
+              >
+                Quitar este bloqueo (copia vieja)
               </button>}
             </div>
           ) : (
