@@ -166,6 +166,15 @@ function datosBloqueo(feed: Feed, ev: EventoIcal, cabana: CabinCode) {
   };
 }
 
+/** De qué calendario vino un bloqueo creado por la versión vieja (null = no se sabe). */
+export function fuenteLegada(r: Pick<Reserva, 'notas' | 'plataforma'>): Fuente | null {
+  const n = (r.notas || '').toLowerCase();
+  if (n.includes('google calendar')) return 'google';
+  if (n.includes('bloqueo ical · airbnb')) return 'airbnb';
+  if (n.includes('bloqueo ical · booking')) return 'booking';
+  return null;
+}
+
 /**
  * Decide qué crear, actualizar y borrar. Función pura (se testea sin red ni base).
  */
@@ -304,11 +313,19 @@ export function planificarSync(reservas: Reserva[], resultados: ResultadoFeed[],
       .forEach(r => borrar.add(r.id));
   }
 
-  // Bloqueos viejos SIN origen: solo se limpian si TODOS los feeds se leyeron bien.
-  // (Los de un feed que hoy no está configurado se dejan: pueden ser reservas reales anotadas en Google.)
-  if (feedsConError.length === 0 && resultados.length > 0) {
+  // Bloqueos viejos SIN origen: se limpian solo si el calendario del que vinieron
+  // está configurado y se leyó bien. Si ese calendario no está cargado (o no se sabe
+  // de dónde vino el bloqueo), se deja: puede ser una reserva real anotada en Google.
+  if (feedsConError.length === 0) {
+    const leidos = new Set(resultados.filter(x => x.eventos).map(x => x.feed.origen));
     vivas()
       .filter(r => esBloqueo(r) && !usadas.has(r.id) && r.checkout > hoy && !r.origen)
+      .filter(r => {
+        const fuente = fuenteLegada(r);
+        if (!fuente) return false;
+        if (fuente === 'google') return leidos.has('google:general') || leidos.has(`google:${r.depto}`);
+        return leidos.has(`${fuente}:${r.depto}`);
+      })
       .forEach(r => borrar.add(r.id));
   }
 
